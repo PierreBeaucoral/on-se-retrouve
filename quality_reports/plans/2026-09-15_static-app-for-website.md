@@ -1,6 +1,6 @@
 # Plan — "On se retrouve" as a static app in the website Apps section
 
-Status: DRAFT (awaiting approval)
+Status: COMPLETED (approved and executed 2026-09-15)
 Date: 2026-09-15
 
 ## Objective
