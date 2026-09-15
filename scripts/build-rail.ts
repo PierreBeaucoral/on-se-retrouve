@@ -1,4 +1,4 @@
-// CLI: download the SNCF open GTFS feed and write per-date rail tables to public/rail/.
+// CLI: download the SNCF open GTFS feed and write rail tables to public/rail/<date>/<origin>.json.
 // Usage: node scripts/build-rail.ts [--gtfs <path|url>] [--out public/rail] [--from YYYY-MM-DD]
 //        [--weeks 40] [--days 5,6,0] [--profiles 06:00,...] [--dates 2026-09-18,...]
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -56,7 +56,14 @@ async function main(): Promise<void> {
     const t = Date.now();
     const day = buildRailDay(feed, date, placeStations, { profiles, intraCityMinutes: INTRA_CITY_MINUTES });
     const pairs = Object.values(day.legs).reduce((n, table) => n + Object.keys(table).length, 0);
-    await writeFile(`${out}/${date}.json`, JSON.stringify({ ...day, feedVersion: feed.feedVersion, generatedAt: new Date().toISOString() }));
+    // One file per origin so the browser only downloads the departure cities it needs.
+    await mkdir(`${out}/${date}`, { recursive: true });
+    const generatedAt = new Date().toISOString();
+    for (const origin of placeStations.keys()) {
+      // Entries are packed as [minutes, departure, arrival, transfers, stationIndices] to keep files small.
+      const legs = Object.fromEntries(day.profiles.map((profile) => [profile, Object.fromEntries(Object.entries(day.legs[profile]).filter(([key]) => key.startsWith(`${origin}|`)).map(([key, e]) => [key.slice(origin.length + 1), [e.m, e.d, e.a, e.t, e.s]]))]));
+      await writeFile(`${out}/${date}/${origin}.json`, JSON.stringify({ date, origin, profiles: day.profiles, stations: day.stations, legs, feedVersion: feed.feedVersion, generatedAt }));
+    }
     summary.push({ date, pairs });
     console.log(`${date} : ${pairs} trajets sur ${profiles.length} profils (${((Date.now() - t) / 1000).toFixed(1)} s)`);
   }
