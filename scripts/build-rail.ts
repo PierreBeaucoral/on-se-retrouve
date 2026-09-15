@@ -4,7 +4,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { places } from "../lib/travel/model.ts";
 import { loadFeedFromZip } from "../lib/rail/gtfs.ts";
-import { buildRailDay, DEFAULT_PROFILES, resolvePlaceStations, upcomingDates } from "../lib/rail/build.ts";
+import { buildRailDay, DEFAULT_MAX_TRANSFERS, DEFAULT_PROFILES, resolvePlaceStations, upcomingDates } from "../lib/rail/build.ts";
 
 export const GTFS_URL = "https://eu.ftp.opendatasoft.com/sncf/plandata/Export_OpenData_SNCF_GTFS_NewTripId.zip";
 const INTRA_CITY_MINUTES: Record<string, number> = { paris: 60, lyon: 40 };
@@ -68,6 +68,7 @@ async function main(): Promise<void> {
     profiles,
     windowMinutes: 360,
     minTransferMinutes: 10,
+    maxTransfers: DEFAULT_MAX_TRANSFERS,
     dates: summary.map((s) => s.date),
     stations: Object.fromEntries([...placeStations].map(([id, stations]) => [id, stations.map((s) => feed.stations.get(s)?.name ?? s)])),
   };

@@ -3,7 +3,7 @@
 import type { Leg } from "./model.ts";
 import type { RailDay } from "../rail/build.ts";
 
-export type RailIndex = { generatedAt: string; feedVersion: string; feedStart: string; feedEnd: string; profiles: string[]; windowMinutes: number; minTransferMinutes: number; dates: string[]; stations: Record<string, string[]> };
+export type RailIndex = { generatedAt: string; feedVersion: string; feedStart: string; feedEnd: string; profiles: string[]; windowMinutes: number; minTransferMinutes: number; maxTransfers?: number; dates: string[]; stations: Record<string, string[]> };
 
 const base = () => `${import.meta.env.BASE_URL}rail/`;
 const dayCache = new Map<string, Promise<RailDay | null>>();
@@ -41,7 +41,7 @@ export async function railLeg(origin: string, destination: string, requested: st
   const profile = pickProfile(day.profiles, time);
   if (!profile) throw new Error(`Horaires calculés jusqu'à ${day.profiles[day.profiles.length - 1]} : saisissez la durée.`);
   const entry = day.legs[profile]?.[`${origin}|${destination}`];
-  if (!entry) throw new Error(`Aucun train trouvé dans les ${Math.round(index.windowMinutes / 60)} h après ${profile} (2 correspondances max).`);
+  if (!entry) throw new Error(`Aucun train trouvé dans les ${Math.round(index.windowMinutes / 60)} h après ${profile} (${index.maxTransfers ?? 3} correspondances max).`);
   return {
     minutes: entry.m,
     source: `SNCF · horaires théoriques (GTFS ${index.feedVersion}) · départs dès ${profile}`,
