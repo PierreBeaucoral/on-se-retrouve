@@ -1,12 +1,15 @@
 // Train durations from the precomputed tables in public/rail/ (built weekly from the SNCF open GTFS
 // feed by scripts/build-rail.ts). No API key, no server: the browser fetches one JSON per date.
 import type { Leg } from "./model.ts";
-import type { RailDay } from "../rail/build.ts";
+// public/rail/<date>/<origin>.json: destinations reachable from one origin on one date.
+// Each entry is packed as [minutes, departure, arrival, transfers, stationIndices].
+export type PackedEntry = [number, number, number, number, number[]];
+export type RailOriginDay = { date: string; origin: string; profiles: string[]; stations: string[]; legs: Record<string, Record<string, PackedEntry>> };
 
 export type RailIndex = { generatedAt: string; feedVersion: string; feedStart: string; feedEnd: string; profiles: string[]; windowMinutes: number; minTransferMinutes: number; maxTransfers?: number; dates: string[]; stations: Record<string, string[]> };
 
 const base = () => `${import.meta.env.BASE_URL}rail/`;
-const dayCache = new Map<string, Promise<RailDay | null>>();
+const dayCache = new Map<string, Promise<RailOriginDay | null>>();
 let indexCache: Promise<RailIndex | null> | undefined;
 
 export function loadRailIndex(): Promise<RailIndex | null> {
@@ -14,11 +17,12 @@ export function loadRailIndex(): Promise<RailIndex | null> {
   return indexCache;
 }
 
-function loadRailDay(date: string): Promise<RailDay | null> {
-  let pending = dayCache.get(date);
+function loadRailDay(date: string, origin: string): Promise<RailOriginDay | null> {
+  const key = `${date}/${origin}`;
+  let pending = dayCache.get(key);
   if (!pending) {
-    pending = fetch(`${base()}${date}.json`).then(async (r) => (r.ok ? ((await r.json()) as RailDay) : null)).catch(() => null);
-    dayCache.set(date, pending);
+    pending = fetch(`${base()}${key}.json`).then(async (r) => (r.ok ? ((await r.json()) as RailOriginDay) : null)).catch(() => null);
+    dayCache.set(key, pending);
   }
   return pending;
 }
@@ -36,19 +40,20 @@ export async function railLeg(origin: string, destination: string, requested: st
   const index = await loadRailIndex();
   if (!index) throw new Error("Horaires précalculés indisponibles.");
   if (!index.dates.includes(date)) throw new Error(`Aucun horaire précalculé pour le ${date.split("-").reverse().join("/")} : saisissez la durée.`);
-  const day = await loadRailDay(date);
-  if (!day) throw new Error("Horaires de ce jour introuvables.");
+  const day = await loadRailDay(date, origin);
+  if (!day) throw new Error("Aucune gare connue pour cette ville de départ.");
   const profile = pickProfile(day.profiles, time);
   if (!profile) throw new Error(`Horaires calculés jusqu'à ${day.profiles[day.profiles.length - 1]} : saisissez la durée.`);
-  const entry = day.legs[profile]?.[`${origin}|${destination}`];
+  const entry = day.legs[profile]?.[destination];
   if (!entry) throw new Error(`Aucun train trouvé dans les ${Math.round(index.windowMinutes / 60)} h après ${profile} (${index.maxTransfers ?? 3} correspondances max).`);
+  const [minutes, dep, arr, transfers, via] = entry;
   return {
-    minutes: entry.m,
+    minutes,
     source: `SNCF · horaires théoriques (GTFS ${index.feedVersion}) · départs dès ${profile}`,
-    departure: `${date}T${formatMinutes(entry.d)}`,
-    arrival: `${date}T${formatMinutes(entry.a)}`,
-    transfers: entry.t,
-    via: entry.s.map((i) => day.stations[i] ?? "?"),
+    departure: `${date}T${formatMinutes(dep)}`,
+    arrival: `${date}T${formatMinutes(arr)}`,
+    transfers,
+    via: via.map((i) => day.stations[i] ?? "?"),
     retrievedAt: index.generatedAt,
   };
 }

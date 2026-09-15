@@ -1,23 +1,8 @@
 export type Mode = "car" | "train";
 export type Choice = Mode | "both";
-export type Place = {id:string; name:string; lon:number; lat:number};
+import { places, type Place } from "./places.ts";
+export { places, type Place };
 export type Group = {id:string; name:string; place:string; railPlace?:string; choice:Choice; note:string; access:number};
-export const places:Place[] = [
-["sainte-verge","Sainte-Verge",-.209,47.008], ["thouars","Thouars",-.215,46.977],
-["clermont","Clermont-Ferrand",3.087,45.777], ["lyon","Lyon",4.8357,45.764],
-["mulhouse","Mulhouse",7.339,47.748], ["paris","Paris",2.3522,48.8566],
-["bourges","Bourges",2.3988,47.081], ["nevers","Nevers",3.157,46.99],
-["dijon","Dijon",5.0415,47.322], ["tours","Tours",.6848,47.394],
-["orleans","Orléans",1.909,47.903], ["auxerre","Auxerre",3.568,47.798],
-["macon","Mâcon",4.832,46.307], ["chalon","Chalon-sur-Saône",4.853,46.781],
-["beaune","Beaune",4.838,47.026], ["vichy","Vichy",3.426,46.128],
-["moulins","Moulins",3.333,46.566], ["montlucon","Montluçon",2.603,46.34],
-["poitiers","Poitiers",.3404,46.58], ["angers","Angers",-.5536,47.478],
-["besancon","Besançon",6.024,47.238], ["le-creusot","Le Creusot",4.425,46.801],
-["sens","Sens",3.283,48.198], ["blois","Blois",1.335,47.587],
-["nantes","Nantes",-1.554,47.218], ["bordeaux","Bordeaux",-.579,44.838],
-["limoges","Limoges",1.261,45.834], ["strasbourg","Strasbourg",7.752,48.583],
-].map(([id,name,lon,lat])=>({id:String(id),name:String(name),lon:Number(lon),lat:Number(lat)}));
 export const initialGroups:Group[] = [
 {id:"elise",name:"Élise",place:"sainte-verge",railPlace:"thouars",choice:"both",note:"Départ en train de Thouars",access:0},
 {id:"clermont",name:"Pierre, Nathalie, Étienne",place:"clermont",choice:"both",note:"3 adultes · une seule voiture",access:0},
