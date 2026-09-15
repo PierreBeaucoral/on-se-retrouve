@@ -56,3 +56,27 @@
 **Status:**
 - Done: rail data verified, local quality gates green, static rebuild committed/pushed, GitHub Pages enabled and deployed successfully (after the lockfile fix), live site verified, website Apps card committed/pushed.
 - Pending: none for this task. The website repo's own Pages deploy was still `in_progress` when last checked and was not awaited further, per instructions.
+
+## 2026-09-15 21:40 — Full-horizon rail tables generated in CI
+
+**Operations:**
+- `scripts/build-rail.ts`: default horizon raised from 8 to 40 weeks, clipped to the feed's end date; logs how many dates fall beyond the GTFS horizon.
+- `.github/workflows/refresh-and-deploy.yml`: rail tables are generated in the workflow (no longer committed); pushes within the same ISO week restore them from the Actions cache, cron and manual runs always recompute.
+- `public/rail/` removed from git and ignored; README updated (coverage, CI generation, `npm run rail` for local dev).
+- Local timing run: 72 dates (2026-09-18 → 2027-02-28) in 4 min 39 s, 10 MB.
+
+**Decisions:**
+- Generate tables in CI rather than commit them — about 70 files × 300 KB per weekly refresh would have grown the repository by roughly 1 GB a year.
+- Cache per ISO week so code pushes deploy in about a minute without recomputing.
+
+**Results:**
+- Run https://github.com/PierreBeaucoral/on-se-retrouve/actions/runs/35013998148 succeeded; rail step 4 min 52 s, deploy 7 s.
+- Live index: feed 2026-09-15, 72 dates, 2026-09-18 → 2027-02-28; `rail/2027-02-26.json` served with HTTP 200.
+- SNCF publishes about five months ahead, so July 2027 becomes available progressively from around February 2027 through the Monday refresh.
+
+**Commits:**
+- `a70bd3d` Cover every weekend in the SNCF feed horizon and generate rail tables in CI
+
+**Status:**
+- Done: full-horizon coverage live; weekly refresh rolls the horizon forward.
+- Pending: nothing. The watcher subagent stalled on `gh run watch`; verification was completed directly.
