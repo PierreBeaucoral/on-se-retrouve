@@ -1,0 +1,120 @@
+// Turns a GTFS feed into the per-date rail tables served by the static app.
+// Kept separate from the CLI so the pipeline is testable on a synthetic feed.
+import { servedStations, stationsForPlace, tripsOnDate, type Feed } from "./gtfs.ts";
+import { buildNetwork, journeyTo, search, type Footpath, type Journey, type Network } from "./raptor.ts";
+
+export type PlaceLike = { id: string; name: string };
+export type RailEntry = { m: number; d: number; a: number; t: number; s: number[] }; // minutes, dep, arr, transfers, station indices
+export type RailTable = Record<string, Record<string, RailEntry>>; // profile -> "origin|dest" -> entry
+export type RailDay = { date: string; profiles: string[]; stations: string[]; legs: RailTable };
+export type BuildOptions = {
+  profiles?: string[];
+  windowMinutes?: number;
+  maxMinutes?: number;
+  minTransferMinutes?: number;
+  maxTransfers?: number;
+  intraCityMinutes?: Record<string, number>;
+  defaultIntraCityMinutes?: number;
+  stationOverrides?: Record<string, string[]>;
+};
+
+export const DEFAULT_PROFILES = ["06:00", "08:00", "10:00", "12:00", "14:00", "16:00", "18:00"];
+
+export function resolvePlaceStations(feed: Feed, places: PlaceLike[], overrides: Record<string, string[]> = {}): Map<string, string[]> {
+  const served = servedStations(feed.trips);
+  const map = new Map<string, string[]>();
+  for (const p of places) {
+    const stations = stationsForPlace(feed, p.name, served, overrides).map((s) => s.id);
+    if (stations.length) map.set(p.id, stations);
+  }
+  return map;
+}
+
+export function intraCityFootpaths(placeStations: Map<string, string[]>, minutes: Record<string, number> = {}, fallback = 30): Footpath[] {
+  const paths: Footpath[] = [];
+  for (const [place, stations] of placeStations) {
+    const seconds = (minutes[place] ?? fallback) * 60;
+    for (const from of stations) for (const to of stations) if (from !== to) paths.push({ from, to, seconds });
+  }
+  return paths;
+}
+
+export function profileSeconds(profile: string): number {
+  const m = /^(\d{2}):(\d{2})$/.exec(profile);
+  if (!m) throw new Error(`Profil horaire invalide : ${profile}`);
+  return Number(m[1]) * 3600 + Number(m[2]) * 60;
+}
+
+export function buildRailDay(feed: Feed, date: string, placeStations: Map<string, string[]>, options: BuildOptions = {}): RailDay {
+  const profiles = options.profiles ?? DEFAULT_PROFILES;
+  const window = (options.windowMinutes ?? 360) * 60;
+  const maxSeconds = (options.maxMinutes ?? 2880) * 60;
+  const minTransferSeconds = (options.minTransferMinutes ?? 10) * 60;
+  const maxRounds = (options.maxTransfers ?? 2) + 1;
+  const trips = tripsOnDate(feed, date.replace(/-/g, ""));
+  const network = buildNetwork(trips, intraCityFootpaths(placeStations, options.intraCityMinutes, options.defaultIntraCityMinutes));
+  const stationNames: string[] = [];
+  const stationIndexByName = new Map<string, number>();
+  const nameIndex = (id: string) => {
+    const name = feed.stations.get(id)?.name ?? id;
+    let i = stationIndexByName.get(name);
+    if (i === undefined) { i = stationNames.length; stationNames.push(name); stationIndexByName.set(name, i); }
+    return i;
+  };
+  const legs: RailTable = {};
+  for (const profile of profiles) {
+    const t0 = profileSeconds(profile);
+    const table: Record<string, RailEntry> = {};
+    for (const [origin, originStations] of placeStations) {
+      // Range query: one search per distinct departure time at the origin inside the window,
+      // keeping for each destination the shortest journey (ties broken by earliest arrival).
+      const best = new Map<string, Journey>();
+      for (const departure of originDepartures(network, originStations, t0, t0 + window)) {
+        const result = search(network, originStations, departure, { maxRounds, minTransferSeconds });
+        if (!result) continue;
+        for (const [dest, destStations] of placeStations) {
+          if (dest === origin) continue;
+          const j = journeyTo(result, destStations);
+          if (!j || j.departure > t0 + window || j.arrival - j.departure > maxSeconds) continue;
+          const current = best.get(dest);
+          const duration = j.arrival - j.departure;
+          if (!current || duration < current.arrival - current.departure || (duration === current.arrival - current.departure && j.arrival < current.arrival)) best.set(dest, j);
+        }
+      }
+      for (const [dest, j] of best) {
+        const stations = [j.legs[0].from, ...j.legs.map((l) => l.to)];
+        table[`${origin}|${dest}`] = { m: Math.round((j.arrival - j.departure) / 60), d: Math.round(j.departure / 60), a: Math.round(j.arrival / 60), t: j.transfers, s: stations.map(nameIndex) };
+      }
+    }
+    legs[profile] = table;
+  }
+  return { date, profiles, stations: stationNames, legs };
+}
+
+// Distinct boarding times at the given stations within [from, to], plus `from` itself.
+export function originDepartures(network: Network, stations: string[], from: number, to: number): number[] {
+  const times = new Set<number>([from]);
+  for (const id of stations) {
+    const s = network.stationIndex.get(id);
+    if (s === undefined) continue;
+    for (const { pattern, index } of network.patternsAtStation[s]) {
+      for (const trip of network.patterns[pattern].trips) {
+        const dep = trip.dep[index];
+        if (trip.board[index] && dep >= from && dep <= to) times.add(dep);
+      }
+    }
+  }
+  return [...times].sort((a, b) => a - b);
+}
+
+// Calendar dates (YYYY-MM-DD) for the requested weekdays over the coming weeks, from a start date.
+export function upcomingDates(from: string, weeks: number, weekdays: number[]): string[] {
+  const start = new Date(`${from}T00:00:00Z`);
+  if (!Number.isFinite(start.getTime())) throw new Error(`Date de départ invalide : ${from}`);
+  const out: string[] = [];
+  for (let i = 0; i < weeks * 7; i++) {
+    const d = new Date(start); d.setUTCDate(start.getUTCDate() + i);
+    if (weekdays.includes(d.getUTCDay())) out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
+}
