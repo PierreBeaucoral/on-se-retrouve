@@ -1,0 +1,47 @@
+export type Mode = "car" | "train";
+export type Choice = Mode | "both";
+export type Place = {id:string; name:string; lon:number; lat:number};
+export type Group = {id:string; name:string; place:string; railPlace?:string; choice:Choice; note:string; access:number};
+export const places:Place[] = [
+["sainte-verge","Sainte-Verge",-.209,47.008], ["thouars","Thouars",-.215,46.977],
+["clermont","Clermont-Ferrand",3.087,45.777], ["lyon","Lyon",4.8357,45.764],
+["mulhouse","Mulhouse",7.339,47.748], ["paris","Paris",2.3522,48.8566],
+["bourges","Bourges",2.3988,47.081], ["nevers","Nevers",3.157,46.99],
+["dijon","Dijon",5.0415,47.322], ["tours","Tours",.6848,47.394],
+["orleans","Orléans",1.909,47.903], ["auxerre","Auxerre",3.568,47.798],
+["macon","Mâcon",4.832,46.307], ["chalon","Chalon-sur-Saône",4.853,46.781],
+["beaune","Beaune",4.838,47.026], ["vichy","Vichy",3.426,46.128],
+["moulins","Moulins",3.333,46.566], ["montlucon","Montluçon",2.603,46.34],
+["poitiers","Poitiers",.3404,46.58], ["angers","Angers",-.5536,47.478],
+["besancon","Besançon",6.024,47.238], ["le-creusot","Le Creusot",4.425,46.801],
+["sens","Sens",3.283,48.198], ["blois","Blois",1.335,47.587],
+["nantes","Nantes",-1.554,47.218], ["bordeaux","Bordeaux",-.579,44.838],
+["limoges","Limoges",1.261,45.834], ["strasbourg","Strasbourg",7.752,48.583],
+].map(([id,name,lon,lat])=>({id:String(id),name:String(name),lon:Number(lon),lat:Number(lat)}));
+export const initialGroups:Group[] = [
+{id:"elise",name:"Élise",place:"sainte-verge",railPlace:"thouars",choice:"both",note:"Départ en train de Thouars",access:0},
+{id:"clermont",name:"Pierre, Nathalie, Étienne",place:"clermont",choice:"both",note:"3 adultes · une seule voiture",access:0},
+{id:"alexandre",name:"Alexandre & Solenne",place:"lyon",choice:"both",note:"2 adultes et 2 enfants",access:0},
+{id:"joel",name:"Joël",place:"mulhouse",choice:"train",note:"Train uniquement",access:0},
+{id:"etienne",name:"Étienne H & Florence",place:"lyon",choice:"both",note:"2 adultes",access:0},
+{id:"guillaume",name:"Guillaume",place:"paris",choice:"train",note:"Train privilégié",access:0},
+];
+export const defaultDestinations = ["bourges","nevers","dijon","tours","orleans","auxerre","macon","chalon","beaune","vichy","moulins","montlucon","poitiers","besancon","le-creusot","sens","lyon","clermont","paris","blois"];
+export type Leg = {minutes:number; source:string; departure?:string; arrival?:string; transfers?:number; retrievedAt:string};
+export type Trip = {out?:Leg; back?:Leg; error?:string};
+export type Matrix = Record<string,Trip>;
+export const tripKey=(origin:string,dest:string,mode:Mode)=>`${origin}|${dest}|${mode}`;
+export const originFor=(g:Group,m:Mode)=>m==="train"?(g.railPlace||g.place):g.place;
+export function scenarios(groups:Group[]):Mode[][] {
+ return groups.reduce<Mode[][]>((rows,g)=>rows.flatMap(row=>(g.choice==="both"?["car","train"]:[g.choice]).map(m=>[...row,m as Mode])),[[]]);
+}
+export function rank(groups:Group[], destinations:string[], modes:Mode[],matrix:Matrix) {
+ return destinations.map(id=>{
+ const trips=groups.map((g,i)=>{const m=modes[i];const t=matrix[tripKey(originFor(g,m),id,m)];const extra=m==="train"?g.access:0;return {group:g.id,mode:m,trip:t,out:t?.out&&validMinutes(t.out.minutes)? t.out.minutes+extra:null,back:t?.back&&validMinutes(t.back.minutes)?t.back.minutes+extra:null};});
+ const complete=trips.every(t=>t.out!==null&&t.back!==null);
+ const durations=trips.flatMap(t=>[t.out,t.back]).filter((x):x is number=>x!==null);
+ return {id,trips,complete,max:complete?Math.max(...durations):null,mean:complete?durations.reduce((a,b)=>a+b,0)/durations.length:null,known:durations.length};
+ }).sort((a,b)=>Number(b.complete)-Number(a.complete)||(a.max??Infinity)-(b.max??Infinity)||(a.mean??Infinity)-(b.mean??Infinity)||a.id.localeCompare(b.id));
+}
+export function duration(n:number|null|undefined){if(n==null||!Number.isFinite(n))return "—";const m=Math.round(n);return `${Math.floor(m/60)} h ${String(m%60).padStart(2,"0")}`;}
+export function validMinutes(value:unknown):value is number {return typeof value==="number"&&Number.isFinite(value)&&value>=0&&value<=2880;}
