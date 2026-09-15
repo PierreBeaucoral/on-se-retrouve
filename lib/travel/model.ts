@@ -27,7 +27,7 @@ export const initialGroups:Group[] = [
 {id:"guillaume",name:"Guillaume",place:"paris",choice:"train",note:"Train privilégié",access:0},
 ];
 export const defaultDestinations = ["bourges","nevers","dijon","tours","orleans","auxerre","macon","chalon","beaune","vichy","moulins","montlucon","poitiers","besancon","le-creusot","sens","lyon","clermont","paris","blois"];
-export type Leg = {minutes:number; source:string; departure?:string; arrival?:string; transfers?:number; retrievedAt:string};
+export type Leg = {minutes:number; source:string; departure?:string; arrival?:string; transfers?:number; via?:string[]; retrievedAt:string};
 export type Trip = {out?:Leg; back?:Leg; error?:string};
 export type Matrix = Record<string,Trip>;
 export const tripKey=(origin:string,dest:string,mode:Mode)=>`${origin}|${dest}|${mode}`;
