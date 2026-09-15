@@ -19,6 +19,7 @@ export type BuildOptions = {
 };
 
 export const DEFAULT_PROFILES = ["06:00", "08:00", "10:00", "12:00", "14:00", "16:00", "18:00"];
+export const DEFAULT_MAX_TRANSFERS = 3;
 
 export function resolvePlaceStations(feed: Feed, places: PlaceLike[], overrides: Record<string, string[]> = {}): Map<string, string[]> {
   const served = servedStations(feed.trips);
@@ -50,7 +51,7 @@ export function buildRailDay(feed: Feed, date: string, placeStations: Map<string
   const window = (options.windowMinutes ?? 360) * 60;
   const maxSeconds = (options.maxMinutes ?? 2880) * 60;
   const minTransferSeconds = (options.minTransferMinutes ?? 10) * 60;
-  const maxRounds = (options.maxTransfers ?? 2) + 1;
+  const maxRounds = (options.maxTransfers ?? DEFAULT_MAX_TRANSFERS) + 1;
   const trips = tripsOnDate(feed, date.replace(/-/g, ""));
   const network = buildNetwork(trips, intraCityFootpaths(placeStations, options.intraCityMinutes, options.defaultIntraCityMinutes));
   const stationNames: string[] = [];

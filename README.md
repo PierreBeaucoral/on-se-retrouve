@@ -27,7 +27,7 @@ The engine lives in `lib/travel/model.ts` and is covered by `tests/model.test.ts
 
 For each date and each departure profile (06:00, 08:00, … 18:00), the script runs a RAPTOR search (`lib/rail/raptor.ts`) from every departure inside the following six hours and keeps, per destination, the journey with the shortest duration, ties broken by earliest arrival. Rules:
 
-- at most two transfers, ten minutes minimum per transfer;
+- at most three transfers, ten minutes minimum per transfer;
 - stations of the same city are linked by a walking time (Paris 60 min, Lyon 40 min, others 30 min);
 - airport and coach stations are not counted as the city;
 - the journey is then "tightened": each leg is moved to the latest train that keeps the same connections, so reported durations exclude avoidable waiting.

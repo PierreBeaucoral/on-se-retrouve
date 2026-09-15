@@ -40,7 +40,8 @@ jobs:
       # would bloat the repository. Pushes within the same week reuse the cached tables.
       - name: Week stamp
         id: week
-        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+        # The routing code hash is part of the key so a change to the router recomputes the tables.
+        run: echo "week=$(date -u +%G-W%V)-${{ hashFiles('lib/rail/**', 'lib/travel/model.ts', 'scripts/build-rail.ts') }}" >> "$GITHUB_OUTPUT"
 
       - name: Restore this week's rail tables
         id: cache
