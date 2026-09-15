@@ -2,13 +2,13 @@ name: Refresh rail tables and deploy
 
 on:
   schedule:
-    - cron: "0 5 * * 1" # Mondays 05:00 UTC: new SNCF GTFS, next eight weekends
+    - cron: "0 5 * * 1" # Mondays 05:00 UTC: new SNCF GTFS, every weekend in its horizon
   push:
     branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 
@@ -21,8 +21,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -38,24 +36,36 @@ jobs:
           npm run typecheck
           npm run lint
 
+      # The rail tables are generated here, not committed: about 70 dates x 300 KB per refresh
+      # would bloat the repository. Pushes within the same week reuse the cached tables.
+      - name: Week stamp
+        id: week
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore this week's rail tables
+        id: cache
+        if: github.event_name == 'push'
+        uses: actions/cache/restore@v4
+        with:
+          path: public/rail
+          key: rail-${{ steps.week.outputs.week }}
+          restore-keys: rail-${{ steps.week.outputs.week }}-
+
       - name: Refresh rail tables from the SNCF open GTFS feed
-        # Scheduled and manual runs recompute the tables; a plain push only rebuilds the site
-        # unless the tables are missing, so code changes deploy fast.
-        if: github.event_name != 'push' || hashFiles('public/rail/index.json') == ''
+        if: github.event_name != 'push' || steps.cache.outputs.cache-matched-key == ''
         run: npm run rail
 
-      - name: Commit refreshed tables
-        if: github.event_name != 'push'
+      - name: Save rail tables for this week
+        if: github.event_name != 'push' || steps.cache.outputs.cache-matched-key == ''
+        uses: actions/cache/save@v4
+        with:
+          path: public/rail
+          key: rail-${{ steps.week.outputs.week }}-${{ github.run_id }}
+
+      - name: Check tables
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/rail
-          if git diff --cached --quiet; then
-            echo "Rail tables unchanged."
-          else
-            git commit -m "Refresh rail tables from SNCF GTFS ($(date -u +%Y-%m-%d))"
-            git push
-          fi
+          test -f public/rail/index.json
+          node -e "const i=require('./public/rail/index.json');console.log(i.feedVersion, i.dates.length+' dates', i.dates[0], '→', i.dates.at(-1))"
 
       - name: Build site
         run: npm run build

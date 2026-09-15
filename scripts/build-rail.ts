@@ -1,6 +1,6 @@
 // CLI: download the SNCF open GTFS feed and write per-date rail tables to public/rail/.
 // Usage: node scripts/build-rail.ts [--gtfs <path|url>] [--out public/rail] [--from YYYY-MM-DD]
-//        [--weeks 8] [--days 5,6,0] [--profiles 06:00,...] [--dates 2026-09-18,...]
+//        [--weeks 40] [--days 5,6,0] [--profiles 06:00,...] [--dates 2026-09-18,...]
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { places } from "../lib/travel/model.ts";
 import { loadFeedFromZip } from "../lib/rail/gtfs.ts";
@@ -31,7 +31,7 @@ async function main(): Promise<void> {
   const source = arg("gtfs", GTFS_URL);
   const out = arg("out", "public/rail");
   const from = arg("from", todayInParis());
-  const weeks = Number(arg("weeks", "8"));
+  const weeks = Number(arg("weeks", "40")); // dates beyond the feed horizon are skipped
   const weekdays = arg("days", "5,6,0").split(",").map(Number);
   const profiles = arg("profiles", DEFAULT_PROFILES.join(",")).split(",");
   const explicitDates = arg("dates", "");
@@ -46,8 +46,10 @@ async function main(): Promise<void> {
     console.log(`  ${p.name.padEnd(18)} → ${stations ? stations.map((id) => feed.stations.get(id)?.name).join(" · ") : "(aucune gare desservie)"}`);
   }
   const inRange = (d: string) => { const c = d.replace(/-/g, ""); return c >= feed.feedStart && c <= feed.feedEnd; };
-  const dates = (explicitDates ? explicitDates.split(",") : upcomingDates(from, weeks, weekdays)).filter(inRange);
+  const candidates = explicitDates ? explicitDates.split(",") : upcomingDates(from, weeks, weekdays);
+  const dates = candidates.filter(inRange);
   if (!dates.length) throw new Error("Aucune date à calculer dans la période couverte par le GTFS.");
+  console.log(`${dates.length} dates à calculer (${dates[0]} → ${dates[dates.length - 1]}) ; ${candidates.length - dates.length} au-delà de l'horizon du GTFS.`);
   await mkdir(out, { recursive: true });
   const summary: { date: string; pairs: number }[] = [];
   for (const date of dates) {
