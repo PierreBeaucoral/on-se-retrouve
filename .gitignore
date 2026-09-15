@@ -13,3 +13,5 @@ next-env.d.ts
 tsconfig.tsbuildinfo
 # GTFS download cache used by scripts/build-rail.ts
 .cache/
+# Rail tables are generated in CI by scripts/build-rail.ts (npm run rail locally)
+public/rail/

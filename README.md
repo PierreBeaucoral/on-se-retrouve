@@ -4,7 +4,7 @@
 
 Live: https://pierrebeaucoral.github.io/on-se-retrouve/
 
-No backend, no API key. The browser asks the IGN routing service for car durations, and reads train durations from tables precomputed weekly from SNCF's open timetable.
+No backend, no API key. The browser asks the IGN routing service for car durations, and reads train durations from tables precomputed weekly from SNCF's open timetable, for every weekend the timetable covers (about five months ahead).
 
 ## How the ranking works
 
@@ -20,7 +20,7 @@ The engine lives in `lib/travel/model.ts` and is covered by `tests/model.test.ts
 | Mode | Source | How |
 |------|--------|-----|
 | Car | [IGN Géoplateforme itinéraire](https://www.data.gouv.fr/dataservices/api-geoplateforme-calcul-ditineraire) | Called from the browser (CORS enabled), fastest route on the BD TOPO road graph, city centre to city centre, no traffic. Cached seven days in the browser. |
-| Train | [Horaires SNCF, GTFS](https://transport.data.gouv.fr/datasets/horaires-sncf) on transport.data.gouv.fr (TGV INOUI, OUIGO, Intercités, TER; 151-day horizon, refreshed daily) | `scripts/build-rail.ts` downloads the feed and precomputes, for the Fridays, Saturdays and Sundays of the next eight weeks, the shortest rail journey between every pair of the app's cities. Coaches are excluded. |
+| Train | [Horaires SNCF, GTFS](https://transport.data.gouv.fr/datasets/horaires-sncf) on transport.data.gouv.fr (TGV INOUI, OUIGO, Intercités, TER; 151-day horizon, refreshed daily) | `scripts/build-rail.ts` downloads the feed and precomputes, for every Friday, Saturday and Sunday inside the feed's horizon (about 70 dates), the shortest rail journey between every pair of the app's cities. Coaches are excluded. |
 | Map | [france-geojson](https://github.com/gregoiredavid/france-geojson) | Region outlines, drawn as SVG. |
 
 ### Rail precomputation
@@ -32,11 +32,11 @@ For each date and each departure profile (06:00, 08:00, … 18:00), the script r
 - airport and coach stations are not counted as the city;
 - the journey is then "tightened": each leg is moved to the latest train that keeps the same connections, so reported durations exclude avoidable waiting.
 
-The output is one JSON per date in `public/rail/` plus `public/rail/index.json`. In the app, a request at 14:30 uses the 16:00 profile: every train shown leaves after the time the user chose. These are theoretical timetables, not sales data; check the actual train before booking.
+The output is one JSON per date in `public/rail/` plus `public/rail/index.json`. These files are generated in CI and not committed (`public/rail/` is git-ignored); run `npm run rail` once for local development. In the app, a request at 14:30 uses the 16:00 profile: every train shown leaves after the time the user chose. These are theoretical timetables, not sales data; check the actual train before booking.
 
 ## Weekly refresh
 
-`.github/workflows/refresh-and-deploy.yml` runs every Monday at 05:00 UTC (and on manual dispatch): it recomputes the rail tables from the latest GTFS, commits them if they changed, builds the site and deploys it to GitHub Pages. A push to `main` rebuilds and deploys without recomputing. If the SNCF download fails the job fails loudly and the previously deployed tables stay live.
+`.github/workflows/refresh-and-deploy.yml` runs every Monday at 05:00 UTC (and on manual dispatch): it recomputes the rail tables from the latest GTFS, builds the site and deploys it to GitHub Pages. As SNCF publishes about five months ahead, the covered range rolls forward one week at a time. A push to `main` reuses the week's tables from the Actions cache and only rebuilds the site. If the SNCF download fails the job fails loudly and the previously deployed tables stay live.
 
 ## Project layout
 
@@ -65,7 +65,7 @@ npm run dev          # local preview with hot reload
 npm test             # engine, routing and parser tests
 npm run typecheck
 npm run lint
-npm run rail         # rebuild public/rail from the live SNCF feed (about five minutes)
+npm run rail         # build public/rail from the live SNCF feed (10-15 minutes)
 npm run rail -- --gtfs path/to/feed.zip --dates 2026-09-18   # offline / single date
 npm run build        # static site in dist/ (base path /on-se-retrouve/)
 VITE_BASE=/ npm run build   # build for another host
