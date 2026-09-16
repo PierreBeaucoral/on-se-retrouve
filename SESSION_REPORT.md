@@ -80,3 +80,31 @@
 **Status:**
 - Done: full-horizon coverage live; weekly refresh rolls the horizon forward.
 - Pending: nothing. The watcher subagent stalled on `gh run watch`; verification was completed directly.
+
+## 2026-09-15 23:10 — 156 cities, three transfers, per-origin rail files
+
+**Operations:**
+- Rail journeys allow three transfers (`DEFAULT_MAX_TRANSFERS`); CI table cache keyed on the routing code hash so router changes recompute.
+- New `scripts/build-places.ts` generates `lib/travel/places.ts` from a curated list (prefectures and main towns) matched to GTFS stations, with explicit station lists for ambiguous names; legacy ids and coordinates preserved.
+- Rail tables written per date and origin (`public/rail/<date>/<origin>.json`), entries packed as arrays; `rail-client.ts` reads the new layout.
+- City filter added to the destinations panel; README updated.
+
+**Decisions:**
+- Curated city list rather than frequency ranking: station frequency surfaces commuter halts (Riviera, Geneva suburbs) instead of towns.
+- Per-origin files so the browser loads only the departure cities in play (about 45 KB each) instead of a 6 MB per-date file.
+- Ajaccio, Dole, Melun dropped: no served station in the SNCF feed under those names.
+
+**Results:**
+- Three transfers: complete all-train destinations on the default weekend 8 → 10.
+- Local full build: 72 dates × 155 origins in 26 min, 330 MB before packing; packed one-date sample 6.2 MB (from 8.8 MB).
+- CI run https://github.com/PierreBeaucoral/on-se-retrouve/actions/runs/35020471252 succeeded: rail step 23 min 22 s, upload 5 s, deploy 5 s.
+- Live index: 72 dates, 155 cities with stations; `rail/2026-09-18/paris.json` served (44.6 KB), `rail/2026-09-20/marseille.json` 200.
+- SNCF Connect spot checks (Paris–Bourges, Thouars–Tours) matched to the minute earlier in the day.
+
+**Commits:**
+- `cc6d793` Allow three transfers on rail journeys and key the CI table cache on the routing code
+- `6f09d8e` Extend the city list to 156 French cities with served stations
+
+**Status:**
+- Done: 156-city app live with weekly refresh over the whole feed horizon.
+- Pending: nothing. Whole-France "any station" search remains a possible next phase (browser-side routing).
