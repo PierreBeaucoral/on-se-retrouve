@@ -68,3 +68,4 @@ fieldset{border:0;padding:0;margin:0;min-width:0}input{background:var(--card);bo
  .groups-panel[open] .groups-toggle span{visibility:hidden}
  .phone-only{display:inline}.wide-only{display:none}
 }
+.estimate{font-style:normal;color:var(--muted-foreground)}

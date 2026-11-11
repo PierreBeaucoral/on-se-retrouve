@@ -4,7 +4,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { places } from "../lib/travel/model.ts";
 import { loadFeedFromZip } from "../lib/rail/gtfs.ts";
-import { buildFareTable, fetchFareRecords, type FareTable } from "../lib/rail/fares.ts";
+import { buildFareTable, fetchFareRecords, parseTerCsv, terModel, type FareTable } from "../lib/rail/fares.ts";
 import { buildRailDay, packOrigin, DEFAULT_MAX_TRANSFERS, DEFAULT_PROFILES, resolvePlaceStations, upcomingDates } from "../lib/rail/build.ts";
 
 export const GTFS_URL = "https://eu.ftp.opendatasoft.com/sncf/plandata/Export_OpenData_SNCF_GTFS_NewTripId.zip";
@@ -47,6 +47,8 @@ async function main(): Promise<void> {
     try { fares = buildFareTable(await fetchFareRecords()); console.log(`Tarifs SNCF : ${fares.size} paires de gares.`); }
     catch (error) { console.warn(`Tarifs ignorés : ${error instanceof Error ? error.message : error}`); }
   }
+  const ter = terModel(parseTerCsv(await readFile("data/ter-fares-2025.csv", "utf8")));
+  console.log(`TER : ${ter.exact.size / 2 | 0} tarifs 2025 connus ; estimation ${ter.base.toFixed(2)} € + ${ter.perKm.toFixed(3)} €/km, fourchette ×${ter.low.toFixed(2)}–${ter.high.toFixed(2)}.`);
   const placeStations = resolvePlaceStations(feed, places);
   for (const p of places) {
     const stations = placeStations.get(p.id);
@@ -61,7 +63,7 @@ async function main(): Promise<void> {
   const summary: { date: string; pairs: number }[] = [];
   for (const date of dates) {
     const t = Date.now();
-    const day = buildRailDay(feed, date, placeStations, { profiles, intraCityMinutes: INTRA_CITY_MINUTES, fares });
+    const day = buildRailDay(feed, date, placeStations, { profiles, intraCityMinutes: INTRA_CITY_MINUTES, fares, ter });
     const pairs = Object.values(day.legs).reduce((n, table) => n + Object.keys(table).length, 0);
     // One file per origin so the browser only downloads the departure cities it needs.
     await mkdir(`${out}/${date}`, { recursive: true });

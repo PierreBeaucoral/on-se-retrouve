@@ -69,7 +69,7 @@ export async function railLeg(origin: string, destination: string, requested: st
   const journey = day.journeys[day.legs[destination]?.[day.profiles.indexOf(profile)] ?? -1];
   if (!journey) throw new Error(`Aucun train trouvé dans les ${Math.round(index.windowMinutes / 60)} h après ${profile} (${index.maxTransfers ?? 3} correspondances max).`);
   const name = (i: number) => day.stations[i] ?? "?";
-  const segments: Segment[] = journey.map(([from, to, d, a, brand, number, min, max]) => ({ from: name(from), to: name(to), departure: formatMinutes(d), arrival: formatMinutes(a), brand: day.brands[brand] ?? "", number, ...(min !== undefined && max !== undefined ? { fare: [min, max] as [number, number] } : {}) }));
+  const segments: Segment[] = journey.map(([from, to, d, a, brand, number, min, max, source]) => ({ from: name(from), to: name(to), departure: formatMinutes(d), arrival: formatMinutes(a), brand: day.brands[brand] ?? "", number, ...(min !== undefined && max !== undefined ? { fare: [min, max] as [number, number], ...(source ? { fareSource: source === 2 ? "ter2025" as const : "estimate" as const } : {}) } : {}) }));
   const dep = journey[0][2], arr = journey[journey.length - 1][3];
   return {
     minutes: arr - dep,

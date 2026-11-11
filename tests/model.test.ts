@@ -177,3 +177,11 @@ test("une commune recherchée est valide seulement avec un code INSEE, des coord
 test("la gare de départ d'une commune recherchée est la ville de la liste la plus proche", () => {
   assert.equal(nearestPlace(-0.2278, 47.0135, places.filter((p) => p.stations.length))?.id, "thouars");
 });
+
+test("un tarif TER estimé rend le coût approximatif (≈) sans le rendre incomplet", () => {
+  const seg = { from: "A", to: "B", departure: "08:00", arrival: "09:00", brand: "Train TER", number: "1", fare: [8, 12.5] as [number, number], fareSource: "estimate" as const };
+  const c = tripCost([{ ...lyon, choice: "train" as const }], [{ mode: "train", trip: { out: { ...leg(60), segments: [seg] }, back: { ...leg(60), segments: [seg] } } }], 0.35);
+  assert.equal(c.complete, true);
+  assert.equal(c.estimated, true);
+  assert.equal(costLabel(c), "≈ 16–25 €");
+});

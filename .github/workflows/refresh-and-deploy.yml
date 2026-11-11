@@ -41,7 +41,7 @@ jobs:
       - name: Week stamp
         id: week
         # The routing code hash is part of the key so a change to the router recomputes the tables.
-        run: echo "week=$(date -u +%G-W%V)-${{ hashFiles('lib/rail/**', 'lib/travel/model.ts', 'scripts/build-rail.ts') }}" >> "$GITHUB_OUTPUT"
+        run: echo "week=$(date -u +%G-W%V)-${{ hashFiles('lib/rail/**', 'lib/travel/model.ts', 'scripts/build-rail.ts', 'data/**') }}" >> "$GITHUB_OUTPUT"
 
       - name: Restore this week's rail tables
         id: cache
@@ -85,3 +85,24 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # SNCF withdrew its per-route TER fare datasets in late 2025; the app estimates TER fares from
+  # distance meanwhile (lib/rail/fares.ts). Each Monday, look for them again and open an issue once.
+  ter-fares-watch:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Look for republished TER fare datasets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ids=$(curl -sf "https://ressources.data.sncf.com/api/explore/v2.1/catalog/datasets?where=search(%22tarif%22)&limit=100&select=dataset_id" | jq -r '.results[].dataset_id')
+          ter=$(echo "$ids" | grep -E '(^|-)ter(-|$)' || true)
+          if [ -z "$ter" ]; then echo "No TER fare dataset on ressources.data.sncf.com."; exit 0; fi
+          echo "::warning::TER fare datasets are back: $ter"
+          title="TER fares republished on SNCF open data"
+          if [ -z "$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number --jq '.[].number')" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "The weekly check found these datasets on ressources.data.sncf.com: $(echo $ter). Replace the distance estimate in lib/rail/fares.ts with published TER fares."
+          fi

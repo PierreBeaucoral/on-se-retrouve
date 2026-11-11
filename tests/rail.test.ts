@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { loadFeed, parseCsv, parseGtfsTime, servedStations, stationsForPlace, tripsOnDate, type FeedFiles } from "../lib/rail/gtfs.ts";
 import { buildNetwork, plan } from "../lib/rail/raptor.ts";
 import { buildRailDay, intraCityFootpaths, resolvePlaceStations, upcomingDates, type RailEntry } from "../lib/rail/build.ts";
-import { buildFareTable, fareFamily, legFare } from "../lib/rail/fares.ts";
+import { readFileSync } from "node:fs";
+import { buildFareTable, crowKm, fareFamily, legFare, parseTerCsv, terFare, terModel } from "../lib/rail/fares.ts";
 
 // Synthetic feed: stations A, B, B2 (same city as B), C, D, E. Rail route R1, coach route RB.
 // T1 A 08:00 → B 09:00 → C 10:00        T2 A 09:00 → B 10:00 → C 11:00
@@ -126,8 +127,14 @@ test("buildRailDay garde le trajet le plus court de la fenêtre de six heures et
   assert.deepEqual(view(day.legs["08:00"]["paris|beaune"]), { m: 53, d: 727, a: 780, t: 0, s: ["Paris Est", "Beaune"] });
   // From 06:00 the six-hour window closes at 12:00, so T9 is out and the connection wins.
   assert.deepEqual(view(day.legs["06:00"]["paris|beaune"]), { m: 150, d: 540, a: 690, t: 1, s: ["Paris Est", "Dijon", "Beaune"] });
-  // Each train carries its own times and brand; no fare table was given, so fares are null.
-  assert.deepEqual(day.legs["06:00"]["paris|beaune"].l.map((x) => x.slice(2)), [[540, 600, "Train TER", "", null, null], [630, 690, "Train TER", "", null, null]]);
+  // Each train carries its own times and brand; without a TER model, TER legs stay unpriced.
+  assert.deepEqual(day.legs["06:00"]["paris|beaune"].l.map((x) => x.slice(2)), [[540, 600, "Train TER", "", null, null, 0], [630, 690, "Train TER", "", null, null, 0]]);
+  // With one, TER legs not listed in the 2025 file get the distance estimate (source 1); listed pairs are tested below.
+  const model = { exact: new Map([["A|B", 9.7], ["B|A", 9.7]]), base: 2, perKm: 0.25, low: 0.7, high: 1.35 };
+  const priced = buildRailDay(feed, "2026-09-19", placeStations, { profiles: ["06:00"], intraCityMinutes: {}, defaultIntraCityMinutes: 30, ter: model });
+  const [first, second] = priced.legs["06:00"]["paris|beaune"].l;
+  assert.equal(first[8], 1, "fixture station ids carry no UIC code, so no 2025 pair matches");
+  assert.deepEqual(second.slice(6), [...terFare(model, "StopArea:B", "StopArea:D", crowKm(feed.stations.get("StopArea:B")!, feed.stations.get("StopArea:D")!)).fare, 1]);
   assert.equal(day.legs["13:00"]["paris|lyon"], undefined, "T8 leaves at 20:00, outside the six-hour window");
   assert.deepEqual(view(day.legs["06:00"]["paris|lyon"]), { m: 30, d: 420, a: 450, t: 0, s: ["Paris Est", "Lyon Part Dieu"] }, "07:00 train T5 is the shortest journey from 06:00");
   assert.equal(day.legs["08:00"]["lyon|paris"], undefined);
@@ -148,6 +155,23 @@ test("les tarifs SNCF sont rattachés par famille de train et code UIC, dans les
   assert.deepEqual(legFare(table, "INTERCITES", "StopArea:OCE87773002", "StopArea:OCE87586008"), [15, 60]);
   assert.equal(legFare(table, "Train TER", "StopArea:OCE87586008", "StopArea:OCE87773002"), undefined);
   assert.equal(legFare(table, "TGV INOUI", "StopArea:OCE87686006", "StopArea:OCE87723197"), undefined, "invalid prices are dropped");
+});
+
+test("TER : tarif 2025 exact quand la paire est connue, sinon estimation large ajustée sur les deux régions archivées", () => {
+  const rows = parseTerCsv(readFileSync(new URL("../data/ter-fares-2025.csv", import.meta.url), "utf8"));
+  assert.ok(rows.length > 3000);
+  assert.deepEqual(new Set(rows.map((r) => r.region)), new Set(["PROVENCE-ALPES-COTE-AZUR", "PAYS DE LA LOIRE"]));
+  const model = terModel(rows);
+  // Fit recomputed from the committed file, each region weighted equally (values checked against an independent fit).
+  assert.ok(Math.abs(model.base - 2.58) < 0.05 && Math.abs(model.perKm - 0.243) < 0.002, `${model.base} ${model.perKm}`);
+  assert.ok(Math.abs(model.low - 0.70) < 0.02 && Math.abs(model.high - 1.35) < 0.02, `${model.low} ${model.high}`);
+  // Avignon TGV → Salon: listed pair, either direction.
+  assert.deepEqual(terFare(model, "StopArea:OCE87318964", "StopArea:OCE87753764", 40), { fare: [14.3, 14.3], source: "ter2025" });
+  assert.deepEqual(terFare(model, "StopArea:OCE87753764", "StopArea:OCE87318964", 40).source, "ter2025");
+  const est = terFare(model, "StopArea:OCE87000001", "StopArea:OCE87000002", 60);
+  assert.equal(est.source, "estimate");
+  assert.ok(est.fare[0] < est.fare[1] && est.fare[0] > 10 && est.fare[1] < 25, String(est.fare));
+  assert.ok(Math.abs(crowKm({ lat: 48.8566, lon: 2.3522 }, { lat: 45.764, lon: 4.8357 }) - 392) < 2, "Paris–Lyon ≈ 392 km");
 });
 
 test("upcomingDates retourne les vendredis, samedis et dimanches à venir", () => {

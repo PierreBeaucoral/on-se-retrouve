@@ -27,7 +27,7 @@ export const initialGroups:Group[] = [
 ];
 export const defaultDestinations = ["bourges","nevers","dijon","tours","orleans","auxerre","macon","chalon","beaune","vichy","moulins","montlucon","poitiers","besancon","le-creusot","sens","lyon","clermont","paris","blois"];
 // One train of a rail journey; fare = SNCF full-price range (2nd class, Tarif Normal) when published.
-export type Segment = {from:string; to:string; departure:string; arrival:string; brand:string; number:string; fare?:[number,number]};
+export type Segment = {from:string; to:string; departure:string; arrival:string; brand:string; number:string; fare?:[number,number]; fareSource?:"ter2025"|"estimate"}; // fareSource: TER fare that is not a current SNCF publication
 export type Leg = {minutes:number; source:string; departure?:string; arrival?:string; transfers?:number; via?:string[]; segments?:Segment[]; projected?:boolean; km?:number; retrievedAt:string};
 export type Trip = {out?:Leg; back?:Leg; error?:string};
 export type Matrix = Record<string,Trip>;
@@ -46,24 +46,24 @@ export function rank(groups:Group[], destinations:string[], modes:Mode[],matrix:
 }
 // Default car cost per kilometre, close to the French volunteer mileage scale used by associations.
 export const DEFAULT_KM_RATE = 0.35;
-export type Cost = {min:number; max:number; complete:boolean; people:number};
+export type Cost = {min:number; max:number; complete:boolean; people:number; estimated?:boolean};
 // Round-trip travel cost of a set of groups. Car: one vehicle per group, distance × rate (tolls and parking
 // excluded). Train: every traveller pays each train's published full-price range. A leg without a distance
 // or a published fare (TER, manual entry) leaves the estimate incomplete: min/max then cover the known part.
 export function tripCost(groups:Group[], trips:{mode:Mode; trip?:Trip}[], rate:number):Cost {
- let min=0,max=0,complete=true,people=0;
+ let min=0,max=0,complete=true,people=0,estimated=false;
  groups.forEach((g,i)=>{const {mode,trip}=trips[i];const n=g.people??1;people+=n;
   for(const leg of [trip?.out,trip?.back]){
    if(mode==="car"){if(leg?.km===undefined){complete=false;continue;}min+=leg.km*rate;max+=leg.km*rate;continue;}
    if(!leg?.segments){complete=false;continue;}
-   for(const s of leg.segments){if(!s.fare){complete=false;continue;}min+=s.fare[0]*n;max+=s.fare[1]*n;}
+   for(const s of leg.segments){if(!s.fare){complete=false;continue;}if(s.fareSource)estimated=true;min+=s.fare[0]*n;max+=s.fare[1]*n;}
   }});
- return {min,max,complete,people};
+ return estimated?{min,max,complete,people,estimated}:{min,max,complete,people};
 }
 export function costLabel(c:Cost, divisor=1):string {
  const lo=Math.round(c.min/divisor),hi=Math.round(c.max/divisor);
  if(!c.complete)return lo>0?`≥ ${lo} €`:"—";
- return lo===hi?`${lo} €`:`${lo}–${hi} €`;
+ const v=lo===hi?`${lo} €`:`${lo}–${hi} €`;return c.estimated?`≈ ${v}`:v;
 }
 export function duration(n:number|null|undefined){if(n==null||!Number.isFinite(n))return "—";const m=Math.round(n);return `${Math.floor(m/60)} h ${String(m%60).padStart(2,"0")}`;}
 export function validMinutes(value:unknown):value is number {return typeof value==="number"&&Number.isFinite(value)&&value>=0&&value<=2880;}
