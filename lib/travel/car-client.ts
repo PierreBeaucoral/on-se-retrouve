@@ -1,14 +1,13 @@
 // Car durations from the IGN Géoplateforme routing API, called directly from the browser
 // (the API answers cross-origin requests). Results are cached for seven days in localStorage.
-import { places, validMinutes, type Leg } from "./model.ts";
+import { placeOf, validMinutes, type Leg } from "./model.ts";
 
 export const IGN_URL = "https://data.geopf.fr/navigation/itineraire";
-const CACHE_KEY = "retrouve.car.v1";
+const CACHE_KEY = "retrouve.car.v2"; // v2: legs carry the road distance
 const CACHE_TTL = 7 * 24 * 3600_000;
 const MIN_INTERVAL = 300; // ms between requests, to stay polite with the public API
 const TIMEOUT = 20_000;
 
-const placeById = new Map(places.map((p) => [p.id, p]));
 let queue: Promise<unknown> = Promise.resolve();
 let lastRequest = 0;
 
@@ -20,6 +19,15 @@ export function parseIgnDuration(payload: unknown): number | null {
   if (typeof raw !== "number" || !Number.isFinite(raw) || raw < 0) return null;
   const minutes = Math.round(raw / 60);
   return validMinutes(minutes) ? minutes : null;
+}
+
+// Road distance in kilometres (one decimal), or null when missing or implausible.
+export function parseIgnDistance(payload: unknown): number | null {
+  if (!payload || typeof payload !== "object") return null;
+  const { distance, distanceUnit } = payload as { distance?: unknown; distanceUnit?: unknown };
+  if (typeof distance !== "number" || !Number.isFinite(distance) || distance < 0) return null;
+  const km = distanceUnit === "kilometer" ? distance : distanceUnit === "meter" ? distance / 1000 : null;
+  return km !== null && km <= 3000 ? Math.round(km * 10) / 10 : null;
 }
 
 type CacheStore = Record<string, { expires: number; leg: Leg }>;
@@ -44,13 +52,13 @@ async function throttled<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 export async function carLeg(origin: string, destination: string, signal?: AbortSignal): Promise<Leg> {
-  const from = placeById.get(origin); const to = placeById.get(destination);
+  const from = placeOf(origin); const to = placeOf(destination);
   if (!from || !to) throw new Error("Origine ou destination inconnue.");
   const key = `${origin}|${destination}`;
   const cache = readCache();
   const hit = cache[key];
   if (hit && hit.expires > Date.now() && validMinutes(hit.leg?.minutes)) return hit.leg;
-  const url = `${IGN_URL}?resource=bdtopo-osrm&start=${from.lon},${from.lat}&end=${to.lon},${to.lat}&profile=car&optimization=fastest&getSteps=false&getGeometry=false&timeUnit=second`;
+  const url = `${IGN_URL}?resource=bdtopo-osrm&start=${from.lon},${from.lat}&end=${to.lon},${to.lat}&profile=car&optimization=fastest&getSteps=false&getGeometry=false&timeUnit=second&distanceUnit=kilometer`;
   const payload = await throttled(async () => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT);
@@ -64,7 +72,8 @@ export async function carLeg(origin: string, destination: string, signal?: Abort
   });
   const minutes = parseIgnDuration(payload);
   if (minutes === null) throw new Error("Durée routière indisponible.");
-  const leg: Leg = { minutes, source: "IGN Géoplateforme", retrievedAt: new Date().toISOString() };
+  const km = parseIgnDistance(payload);
+  const leg: Leg = { minutes, ...(km !== null ? { km } : {}), source: `IGN Géoplateforme${km !== null ? ` · ${km.toLocaleString("fr-FR")} km` : ""}`, retrievedAt: new Date().toISOString() };
   const fresh = readCache();
   const now = Date.now();
   for (const k of Object.keys(fresh)) if (!(fresh[k]?.expires > now)) delete fresh[k];

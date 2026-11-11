@@ -12,6 +12,13 @@ No backend, no API key. The browser asks the IGN routing service for car duratio
 - For a scenario and a destination, each group contributes an outbound and a return duration. Train legs add the group's station access margin on each leg.
 - Destinations where every group has both legs are **complete** and ranked first by the maximum duration, then by the mean duration (each group weighs the same), then alphabetically. Incomplete destinations are listed but unranked. No missing value is ever replaced by zero.
 - Manual train entry stays available for dates or connections the precomputed tables do not cover.
+- **Cost estimate** (shown per destination, per group and per person, not used for ranking): a car is one vehicle per group, round-trip road distance × a per-km rate (default 0.35 €/km, close to the volunteer mileage scale used by French associations; editable, tolls and parking excluded). A train traveller pays the full-price range SNCF publishes for each train (2nd class, Tarif Normal). TER fares are not published, so a journey with a TER leg shows a lower bound (`≥`).
+
+## Groups and privacy
+
+The site ships neutral placeholder groups. A visitor's own groups (names, towns, number of travellers) are kept only in their browser (`localStorage`). "Copier le lien de partage" puts them in the URL fragment (`#partage=…`), which browsers never send to a server; the app reads it once and removes it from the address bar.
+
+Any French commune can be added as a departure ("Autre commune", searched on [geo.api.gouv.fr](https://geo.api.gouv.fr/decoupage-administratif/communes)): road trips start from the commune itself, trains from the nearest listed city with a station (editable), with the station access time entered as the group's margin.
 
 The engine lives in `lib/travel/model.ts` and is covered by `tests/model.test.ts`.
 
@@ -21,6 +28,8 @@ The engine lives in `lib/travel/model.ts` and is covered by `tests/model.test.ts
 |------|--------|-----|
 | Car | [IGN Géoplateforme itinéraire](https://www.data.gouv.fr/dataservices/api-geoplateforme-calcul-ditineraire) | Called from the browser (CORS enabled), fastest route on the BD TOPO road graph, city centre to city centre, no traffic. Cached seven days in the browser. |
 | Train | [Horaires SNCF, GTFS](https://transport.data.gouv.fr/datasets/horaires-sncf) on transport.data.gouv.fr (TGV INOUI, OUIGO, Intercités, TER; 151-day horizon, refreshed daily) | `scripts/build-rail.ts` downloads the feed and precomputes, for every Friday, Saturday and Sunday inside the feed's horizon (about 70 dates), the shortest rail journey between every pair of the app's 156 cities. Coaches are excluded. |
+| Train fares | [Tarifs TGV INOUI et OUIGO](https://ressources.data.sncf.com/explore/dataset/tarifs-tgv-inoui-ouigo/), [Tarifs Intercités](https://ressources.data.sncf.com/explore/dataset/tarifs-intercites/) (SNCF open data) | Downloaded by `scripts/build-rail.ts` and matched to each train by brand and station UIC code (`lib/rail/fares.ts`). Full-price min–max range, 2nd class. If the download fails the tables are built without prices. |
+| Communes | [geo.api.gouv.fr](https://geo.api.gouv.fr/decoupage-administratif/communes) | Called from the browser when a user searches a town outside the list. |
 | Map | [france-geojson](https://github.com/gregoiredavid/france-geojson) | Region outlines, drawn as SVG. |
 
 ### Rail precomputation
@@ -32,7 +41,11 @@ For each date and each departure profile (06:00, 08:00, … 18:00), the script r
 - airport and coach stations are not counted as the city;
 - the journey is then "tightened": each leg is moved to the latest train that keeps the same connections, so reported durations exclude avoidable waiting.
 
-The output is one JSON per date and departure city in `public/rail/<date>/<origin>.json` plus `public/rail/index.json`, so the browser only downloads the departure cities in play. These files are generated in CI and not committed (`public/rail/` is git-ignored); run `npm run rail` once for local development. In the app, a request at 14:30 uses the 16:00 profile: every train shown leaves after the time the user chose. These are theoretical timetables, not sales data; check the actual train before booking.
+The output is one JSON per date and departure city in `public/rail/<date>/<origin>.json` plus `public/rail/index.json`, so the browser only downloads the departure cities in play. Each file stores deduplicated journeys, train by train (stations, times, brand such as TGV INOUI or TER, train number, fare range when published), and for each destination the journey index per departure profile (`packOrigin` in `lib/rail/build.ts`). A date is about 7 MB (2 MB gzipped).
+
+### Beyond the SNCF horizon
+
+SNCF publishes timetables about five months ahead. For a Friday, Saturday or Sunday after the last published date, and up to a year after the tables were built, the app projects the trip from the most recent published day with the same weekday whose timetable is complete (at least 95 % of the busiest such day, since the last weeks of a feed are often partial). Projected trips are labelled as such; check them when sales open. These files are generated in CI and not committed (`public/rail/` is git-ignored); run `npm run rail` once for local development. In the app, a request at 14:30 uses the 16:00 profile: every train shown leaves after the time the user chose. These are theoretical timetables, not sales data; check the actual train before booking.
 
 ## Cities
 
@@ -56,6 +69,7 @@ lib/travel/client.ts          one round trip = car or rail, outbound + return
 lib/rail/gtfs.ts              GTFS parsing, station mapping
 lib/rail/raptor.ts            RAPTOR routing and journey tightening
 lib/rail/build.ts             per-date table builder
+lib/rail/fares.ts             SNCF open fare data, matched to trains
 lib/rail/zip.ts               minimal zip reader (no native unzip needed)
 scripts/build-rail.ts         CLI: GTFS → public/rail/<date>/<origin>.json
 scripts/build-places.ts       CLI: curated city names + GTFS → lib/travel/places.ts
@@ -72,7 +86,8 @@ npm test             # engine, routing and parser tests
 npm run typecheck
 npm run lint
 npm run rail         # build public/rail from the live SNCF feed (about 30 minutes for 156 cities)
-npm run rail -- --gtfs path/to/feed.zip --dates 2026-09-18   # offline / single date
+npm run rail -- --gtfs path/to/feed.zip --dates 2026-09-18   # local feed / single date
+npm run rail -- --no-fares   # skip the fare download
 npm run build        # static site in dist/ (base path /on-se-retrouve/)
 VITE_BASE=/ npm run build   # build for another host
 ```

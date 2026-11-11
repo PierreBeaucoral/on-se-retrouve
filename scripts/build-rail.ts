@@ -1,10 +1,11 @@
 // CLI: download the SNCF open GTFS feed and write rail tables to public/rail/<date>/<origin>.json.
-// Usage: node scripts/build-rail.ts [--gtfs <path|url>] [--out public/rail] [--from YYYY-MM-DD]
+// Usage: node scripts/build-rail.ts [--no-fares] [--gtfs <path|url>] [--out public/rail] [--from YYYY-MM-DD]
 //        [--weeks 40] [--days 5,6,0] [--profiles 06:00,...] [--dates 2026-09-18,...]
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { places } from "../lib/travel/model.ts";
 import { loadFeedFromZip } from "../lib/rail/gtfs.ts";
-import { buildRailDay, DEFAULT_MAX_TRANSFERS, DEFAULT_PROFILES, resolvePlaceStations, upcomingDates } from "../lib/rail/build.ts";
+import { buildFareTable, fetchFareRecords, type FareTable } from "../lib/rail/fares.ts";
+import { buildRailDay, packOrigin, DEFAULT_MAX_TRANSFERS, DEFAULT_PROFILES, resolvePlaceStations, upcomingDates } from "../lib/rail/build.ts";
 
 export const GTFS_URL = "https://eu.ftp.opendatasoft.com/sncf/plandata/Export_OpenData_SNCF_GTFS_NewTripId.zip";
 const INTRA_CITY_MINUTES: Record<string, number> = { paris: 60, lyon: 40 };
@@ -40,6 +41,12 @@ async function main(): Promise<void> {
   console.log(`GTFS : ${source}`);
   const feed = loadFeedFromZip(await readGtfs(source));
   console.log(`Feed ${feed.feedVersion} (${feed.feedStart} → ${feed.feedEnd}) : ${feed.trips.length} trajets ferroviaires, ${feed.stations.size} gares.`);
+  // Fares are optional: a failed download leaves the timetables intact and the app shows no prices.
+  let fares: FareTable | undefined;
+  if (!process.argv.includes("--no-fares")) {
+    try { fares = buildFareTable(await fetchFareRecords()); console.log(`Tarifs SNCF : ${fares.size} paires de gares.`); }
+    catch (error) { console.warn(`Tarifs ignorés : ${error instanceof Error ? error.message : error}`); }
+  }
   const placeStations = resolvePlaceStations(feed, places);
   for (const p of places) {
     const stations = placeStations.get(p.id);
@@ -54,15 +61,13 @@ async function main(): Promise<void> {
   const summary: { date: string; pairs: number }[] = [];
   for (const date of dates) {
     const t = Date.now();
-    const day = buildRailDay(feed, date, placeStations, { profiles, intraCityMinutes: INTRA_CITY_MINUTES });
+    const day = buildRailDay(feed, date, placeStations, { profiles, intraCityMinutes: INTRA_CITY_MINUTES, fares });
     const pairs = Object.values(day.legs).reduce((n, table) => n + Object.keys(table).length, 0);
     // One file per origin so the browser only downloads the departure cities it needs.
     await mkdir(`${out}/${date}`, { recursive: true });
     const generatedAt = new Date().toISOString();
     for (const origin of placeStations.keys()) {
-      // Entries are packed as [minutes, departure, arrival, transfers, stationIndices] to keep files small.
-      const legs = Object.fromEntries(day.profiles.map((profile) => [profile, Object.fromEntries(Object.entries(day.legs[profile]).filter(([key]) => key.startsWith(`${origin}|`)).map(([key, e]) => [key.slice(origin.length + 1), [e.m, e.d, e.a, e.t, e.s]]))]));
-      await writeFile(`${out}/${date}/${origin}.json`, JSON.stringify({ date, origin, profiles: day.profiles, stations: day.stations, legs, feedVersion: feed.feedVersion, generatedAt }));
+      await writeFile(`${out}/${date}/${origin}.json`, JSON.stringify({ ...packOrigin(day, origin), feedVersion: feed.feedVersion, generatedAt }));
     }
     summary.push({ date, pairs });
     console.log(`${date} : ${pairs} trajets sur ${profiles.length} profils (${((Date.now() - t) / 1000).toFixed(1)} s)`);
@@ -76,7 +81,10 @@ async function main(): Promise<void> {
     windowMinutes: 360,
     minTransferMinutes: 10,
     maxTransfers: DEFAULT_MAX_TRANSFERS,
+    fares: fares ? { generatedAt: new Date().toISOString(), pairs: fares.size } : null,
     dates: summary.map((s) => s.date),
+    // Journeys per date: lets the app pick a complete reference day when projecting beyond the horizon.
+    pairs: Object.fromEntries(summary.map((s) => [s.date, s.pairs])),
     stations: Object.fromEntries([...placeStations].map(([id, stations]) => [id, stations.map((s) => feed.stations.get(s)?.name ?? s)])),
   };
   await writeFile(`${out}/index.json`, JSON.stringify(index, null, 1));

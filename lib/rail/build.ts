@@ -1,10 +1,14 @@
 // Turns a GTFS feed into the per-date rail tables served by the static app.
 // Kept separate from the CLI so the pipeline is testable on a synthetic feed.
 import { servedStations, stationsForPlace, tripsOnDate, type Feed } from "./gtfs.ts";
+import { legFare, type FareTable } from "./fares.ts";
 import { buildNetwork, journeyTo, search, type Footpath, type Journey, type Network } from "./raptor.ts";
 
 export type PlaceLike = { id: string; name: string; stations?: string[] };
-export type RailEntry = { m: number; d: number; a: number; t: number; s: number[] }; // minutes, dep, arr, transfers, station indices
+// One train: [from station index, to station index, dep, arr (minutes after midnight), brand, train number, fare min, fare max].
+// Fares are null when SNCF publishes none for that train (TER, foreign operators, unlisted pairs).
+export type PackedSegment = [number, number, number, number, string, string, number | null, number | null];
+export type RailEntry = { m: number; d: number; a: number; t: number; l: PackedSegment[] }; // minutes, dep, arr, transfers, trains
 export type RailTable = Record<string, Record<string, RailEntry>>; // profile -> "origin|dest" -> entry
 export type RailDay = { date: string; profiles: string[]; stations: string[]; legs: RailTable };
 export type BuildOptions = {
@@ -16,6 +20,7 @@ export type BuildOptions = {
   intraCityMinutes?: Record<string, number>;
   defaultIntraCityMinutes?: number;
   stationOverrides?: Record<string, string[]>;
+  fares?: FareTable;
 };
 
 export const DEFAULT_PROFILES = ["06:00", "08:00", "10:00", "12:00", "14:00", "16:00", "18:00"];
@@ -56,6 +61,7 @@ export function buildRailDay(feed: Feed, date: string, placeStations: Map<string
   const minTransferSeconds = (options.minTransferMinutes ?? 10) * 60;
   const maxRounds = (options.maxTransfers ?? DEFAULT_MAX_TRANSFERS) + 1;
   const trips = tripsOnDate(feed, date.replace(/-/g, ""));
+  const tripById = new Map(trips.map((t) => [t.id, t]));
   const network = buildNetwork(trips, intraCityFootpaths(placeStations, options.intraCityMinutes, options.defaultIntraCityMinutes));
   const stationNames: string[] = [];
   const stationIndexByName = new Map<string, number>();
@@ -86,13 +92,42 @@ export function buildRailDay(feed: Feed, date: string, placeStations: Map<string
         }
       }
       for (const [dest, j] of best) {
-        const stations = [j.legs[0].from, ...j.legs.map((l) => l.to)];
-        table[`${origin}|${dest}`] = { m: Math.round((j.arrival - j.departure) / 60), d: Math.round(j.departure / 60), a: Math.round(j.arrival / 60), t: j.transfers, s: stations.map(nameIndex) };
+        const l = j.legs.map((leg): PackedSegment => {
+          const trip = tripById.get(leg.tripId);
+          const fare = options.fares && trip ? legFare(options.fares, trip.brand, leg.from, leg.to) : undefined;
+          return [nameIndex(leg.from), nameIndex(leg.to), Math.round(leg.dep / 60), Math.round(leg.arr / 60), trip?.brand ?? "", trip?.number ?? "", fare?.[0] ?? null, fare?.[1] ?? null];
+        });
+        table[`${origin}|${dest}`] = { m: Math.round((j.arrival - j.departure) / 60), d: Math.round(j.departure / 60), a: Math.round(j.arrival / 60), t: j.transfers, l };
       }
     }
     legs[profile] = table;
   }
   return { date, profiles, stations: stationNames, legs };
+}
+
+// File format of public/rail/<date>/<origin>.json. Journeys are deduplicated (the same train often
+// wins several departure profiles) and destinations map to one journey index per profile (-1: none).
+// A stored train is [from, to, dep, arr, brand index, number] plus [fare min, fare max] when known.
+export type StoredSegment = [number, number, number, number, number, string] | [number, number, number, number, number, string, number, number];
+export type RailOriginFile = { date: string; origin: string; profiles: string[]; stations: string[]; brands: string[]; journeys: StoredSegment[][]; legs: Record<string, number[]> };
+
+export function packOrigin(day: RailDay, origin: string): RailOriginFile {
+  const brands: string[] = [];
+  const journeys: StoredSegment[][] = [];
+  const seen = new Map<string, number>();
+  const legs: Record<string, number[]> = {};
+  const brandIndex = (b: string) => { let i = brands.indexOf(b); if (i < 0) { i = brands.length; brands.push(b); } return i; };
+  day.profiles.forEach((profile, p) => {
+    for (const [key, entry] of Object.entries(day.legs[profile])) {
+      if (!key.startsWith(`${origin}|`)) continue;
+      const journey = entry.l.map(([from, to, dep, arr, brand, number, min, max]): StoredSegment => min === null || max === null ? [from, to, dep, arr, brandIndex(brand), number] : [from, to, dep, arr, brandIndex(brand), number, min, max]);
+      const id = JSON.stringify(journey);
+      let index = seen.get(id);
+      if (index === undefined) { index = journeys.length; journeys.push(journey); seen.set(id, index); }
+      (legs[key.slice(origin.length + 1)] ??= Array(day.profiles.length).fill(-1))[p] = index;
+    }
+  });
+  return { date: day.date, origin, profiles: day.profiles, stations: day.stations, brands, journeys, legs };
 }
 
 // Distinct boarding times at the given stations within [from, to], plus `from` itself.

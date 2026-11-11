@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   defaultDestinations, duration, initialGroups, originFor, rank, scenarios,
-  tripKey, validMinutes,
+  tripKey, validMinutes, tripCost, costLabel, validCustom, nearestPlace, places,
   type Group, type Matrix,
 } from "../lib/travel/model.ts";
 
@@ -139,4 +139,41 @@ test("duration formate correctement zéro et arrondit les minutes", () => {
 test("les destinations par défaut sont identifiants non vides", () => {
   assert.ok(defaultDestinations.length > 0);
   assert.ok(defaultDestinations.every((id) => id.length > 0));
+});
+
+test("le coût additionne voiture au kilomètre (une par groupe) et billets de train par voyageur", () => {
+  const car = { ...clermont, people: 3 };
+  const train = { ...lyon, choice: "train" as const, people: 2 };
+  const seg = (fare?: [number, number]) => ({ from: "A", to: "B", departure: "08:00", arrival: "09:00", brand: "TGV INOUI", number: "1", ...(fare ? { fare } : {}) });
+  const trips = [
+    { mode: "car" as const, trip: { out: { ...leg(100), km: 200 }, back: { ...leg(100), km: 200 } } },
+    { mode: "train" as const, trip: { out: { ...leg(90), segments: [seg([20, 60])] }, back: { ...leg(90), segments: [seg([20, 60])] } } },
+  ];
+  const c = tripCost([car, train], trips, 0.35);
+  assert.deepEqual(c, { min: 140 + 80, max: 140 + 240, complete: true, people: 5 });
+  assert.equal(costLabel(c), "220–380 €");
+  assert.equal(costLabel(c, c.people), "44–76 €");
+});
+
+test("un train sans tarif publié ou une distance manquante rend le coût incomplet", () => {
+  const seg = { from: "A", to: "B", departure: "08:00", arrival: "09:00", brand: "Train TER", number: "1" };
+  const c = tripCost([{ ...lyon, choice: "train" as const }], [{ mode: "train", trip: { out: { ...leg(60), segments: [seg] }, back: { ...leg(60), segments: [] } } }], 0.35);
+  assert.equal(c.complete, false);
+  assert.equal(costLabel(c), "—");
+  const car = tripCost([clermont], [{ mode: "car", trip: { out: { ...leg(60), km: 100 }, back: leg(60) } }], 0.35);
+  assert.equal(costLabel(car), "≥ 35 €");
+});
+
+test("une commune recherchée est valide seulement avec un code INSEE, des coordonnées en France et une gare de la liste", () => {
+  const custom = { id: "commune-79300", name: "Sainte-Verge (79)", lon: -0.2278, lat: 47.0135, stations: [] };
+  const g: Group = { ...clermont, place: custom.id, custom, railPlace: "thouars" };
+  assert.equal(validCustom(g), true);
+  assert.equal(validCustom({ ...g, railPlace: undefined }), false, "a rail departure is required");
+  assert.equal(validCustom({ ...g, custom: { ...custom, lat: 60 } }), false, "outside metropolitan France");
+  assert.equal(validCustom({ ...g, custom: { ...custom, id: "commune-<script>" }, place: "commune-<script>" }), false);
+  assert.equal(validCustom({ ...g, place: "lyon" }), false, "custom must match the place");
+});
+
+test("la gare de départ d'une commune recherchée est la ville de la liste la plus proche", () => {
+  assert.equal(nearestPlace(-0.2278, 47.0135, places.filter((p) => p.stations.length))?.id, "thouars");
 });

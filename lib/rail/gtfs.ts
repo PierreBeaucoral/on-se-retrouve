@@ -4,7 +4,8 @@ import { readZipText } from "./zip.ts";
 
 export type Station = { id: string; name: string; lat: number; lon: number };
 export type StopTime = { station: string; arr: number; dep: number; board: boolean; alight: boolean };
-export type Trip = { id: string; serviceId: string; routeId: string; stops: StopTime[] };
+// brand: commercial mode SNCF encodes in stop point ids ("TGV INOUI", "OUIGO", "Train TER"…); number: train number.
+export type Trip = { id: string; serviceId: string; routeId: string; brand: string; number: string; stops: StopTime[] };
 export type Feed = {
   stations: Map<string, Station>;
   trips: Trip[];
@@ -19,6 +20,7 @@ const RAIL_ROUTE_TYPES = new Set(["2"]); // GTFS route_type 2 = rail; 3 = bus/co
 // SNCF encodes the commercial mode in stop point ids ("StopPoint:OCECar TER-…"); coaches also
 // appear under rail routes, so trips touching a coach stop point are dropped as well.
 const COACH_STOP_PATTERN = /^StopPoint:OCECar\b/i;
+const BRAND_PATTERN = /^StopPoint:OCE(.+)-[^-]+$/;
 // Stations that carry a city name but are not where a family would meet a train.
 export const EXCLUDED_STATION_PATTERNS = [/gare routi/i, /routiere/i, /point rencontre/i, /saint-exup/i];
 
@@ -74,15 +76,17 @@ export function loadFeed(files: FeedFiles): Feed {
     parentOf.set(s.stop_id, parent);
   }
   const railRoutes = new Set(parseCsv(files["routes.txt"]).filter((r) => RAIL_ROUTE_TYPES.has(r.route_type)).map((r) => r.route_id));
-  const tripMeta = new Map<string, { serviceId: string; routeId: string }>();
-  for (const t of parseCsv(files["trips.txt"])) if (railRoutes.has(t.route_id)) tripMeta.set(t.trip_id, { serviceId: t.service_id, routeId: t.route_id });
+  const tripMeta = new Map<string, { serviceId: string; routeId: string; number: string }>();
+  for (const t of parseCsv(files["trips.txt"])) if (railRoutes.has(t.route_id)) tripMeta.set(t.trip_id, { serviceId: t.service_id, routeId: t.route_id, number: t.trip_headsign ?? "" });
   const stopsByTrip = new Map<string, (StopTime & { seq: number })[]>();
   const coachTrips = new Set<string>();
+  const brandOf = new Map<string, string>();
   for (const st of parseCsv(files["stop_times.txt"])) {
     if (!tripMeta.has(st.trip_id)) continue;
     if (COACH_STOP_PATTERN.test(st.stop_id)) { coachTrips.add(st.trip_id); continue; }
     const arr = parseGtfsTime(st.arrival_time || st.departure_time);
     const dep = parseGtfsTime(st.departure_time || st.arrival_time);
+    if (!brandOf.has(st.trip_id)) brandOf.set(st.trip_id, BRAND_PATTERN.exec(st.stop_id)?.[1] ?? "");
     const station = parentOf.get(st.stop_id) ?? st.stop_id;
     if (arr === null || dep === null || !stations.has(station)) continue;
     const list = stopsByTrip.get(st.trip_id) ?? [];
@@ -95,7 +99,7 @@ export function loadFeed(files: FeedFiles): Feed {
     list.sort((a, b) => a.seq - b.seq);
     if (list.length < 2) continue;
     const meta = tripMeta.get(id)!;
-    trips.push({ id, serviceId: meta.serviceId, routeId: meta.routeId, stops: list.map(({ seq: _seq, ...rest }) => rest) });
+    trips.push({ id, serviceId: meta.serviceId, routeId: meta.routeId, brand: brandOf.get(id) ?? "", number: meta.number, stops: list.map(({ seq: _seq, ...rest }) => rest) });
   }
   const serviceDates = new Map<string, Set<string>>();
   for (const c of parseCsv(files["calendar_dates.txt"])) {

@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { loadFeed, parseCsv, parseGtfsTime, servedStations, stationsForPlace, tripsOnDate, type FeedFiles } from "../lib/rail/gtfs.ts";
 import { buildNetwork, plan } from "../lib/rail/raptor.ts";
-import { buildRailDay, intraCityFootpaths, resolvePlaceStations, upcomingDates } from "../lib/rail/build.ts";
+import { buildRailDay, intraCityFootpaths, resolvePlaceStations, upcomingDates, type RailEntry } from "../lib/rail/build.ts";
+import { buildFareTable, fareFamily, legFare } from "../lib/rail/fares.ts";
 
 // Synthetic feed: stations A, B, B2 (same city as B), C, D, E. Rail route R1, coach route RB.
 // T1 A 08:00 → B 09:00 → C 10:00        T2 A 09:00 → B 10:00 → C 11:00
@@ -118,20 +119,50 @@ test("aucun trajet quand plus rien ne part, ni au-delà de deux correspondances"
 test("buildRailDay garde le trajet le plus court de la fenêtre de six heures et exporte des minutes", () => {
   const placeStations = resolvePlaceStations(feed, places);
   const day = buildRailDay(feed, "2026-09-19", placeStations, { profiles: ["06:00", "08:00", "13:00"], intraCityMinutes: {}, defaultIntraCityMinutes: 30 });
-  const names = (e: { s: number[] } | undefined) => e?.s.map((i) => day.stations[i]);
-  assert.deepEqual(day.legs["08:00"]["paris|lyon"], { m: 120, d: 480, a: 600, t: 0, s: day.legs["08:00"]["paris|lyon"].s });
-  assert.deepEqual(names(day.legs["08:00"]["paris|lyon"]), ["Paris Est", "Lyon Part Dieu"]);
+  // Summary view of an entry: totals plus the stations passed through, in order.
+  const view = (e: RailEntry | undefined) => e && { m: e.m, d: e.d, a: e.a, t: e.t, s: [day.stations[e.l[0][0]], ...e.l.map((x) => day.stations[x[1]])] };
+  assert.deepEqual(view(day.legs["08:00"]["paris|lyon"]), { m: 120, d: 480, a: 600, t: 0, s: ["Paris Est", "Lyon Part Dieu"] });
   // Earliest arrival would be T2+T3 (09:00 → 11:30, 150 min); the direct T9 at 12:07 is shorter and inside the window.
-  assert.deepEqual({ ...day.legs["08:00"]["paris|beaune"], s: names(day.legs["08:00"]["paris|beaune"]) }, { m: 53, d: 727, a: 780, t: 0, s: ["Paris Est", "Beaune"] });
+  assert.deepEqual(view(day.legs["08:00"]["paris|beaune"]), { m: 53, d: 727, a: 780, t: 0, s: ["Paris Est", "Beaune"] });
   // From 06:00 the six-hour window closes at 12:00, so T9 is out and the connection wins.
-  assert.deepEqual({ ...day.legs["06:00"]["paris|beaune"], s: names(day.legs["06:00"]["paris|beaune"]) }, { m: 150, d: 540, a: 690, t: 1, s: ["Paris Est", "Dijon", "Beaune"] });
+  assert.deepEqual(view(day.legs["06:00"]["paris|beaune"]), { m: 150, d: 540, a: 690, t: 1, s: ["Paris Est", "Dijon", "Beaune"] });
+  // Each train carries its own times and brand; no fare table was given, so fares are null.
+  assert.deepEqual(day.legs["06:00"]["paris|beaune"].l.map((x) => x.slice(2)), [[540, 600, "Train TER", "", null, null], [630, 690, "Train TER", "", null, null]]);
   assert.equal(day.legs["13:00"]["paris|lyon"], undefined, "T8 leaves at 20:00, outside the six-hour window");
-  assert.deepEqual({ ...day.legs["06:00"]["paris|lyon"], s: names(day.legs["06:00"]["paris|lyon"]) }, { m: 30, d: 420, a: 450, t: 0, s: ["Paris Est", "Lyon Part Dieu"] }, "07:00 train T5 is the shortest journey from 06:00");
+  assert.deepEqual(view(day.legs["06:00"]["paris|lyon"]), { m: 30, d: 420, a: 450, t: 0, s: ["Paris Est", "Lyon Part Dieu"] }, "07:00 train T5 is the shortest journey from 06:00");
   assert.equal(day.legs["08:00"]["lyon|paris"], undefined);
   assert.equal(day.legs["08:00"]["paris|paris"], undefined);
+});
+
+test("les tarifs SNCF sont rattachés par famille de train et code UIC, dans les deux sens", () => {
+  assert.equal(fareFamily("TGV INOUI"), "inoui");
+  assert.equal(fareFamily("OUIGO TRAIN CLASSIQUE"), "ouigo");
+  assert.equal(fareFamily("INTERCITES de nuit"), "intercites-nuit");
+  assert.equal(fareFamily("Intercités de jour à réservation obligatoire"), "intercites");
+  assert.equal(fareFamily("Train TER"), null);
+  const table = buildFareTable([
+    { carrier: "Intercités de jour à réservation obligatoire", from: "87586008", to: "87773002", min: 19, max: 55 },
+    { carrier: "Intercités de jour sans réservation obligatoire", from: "87586008", to: "87773002", min: 15, max: 60 },
+    { carrier: "TGV INOUI", from: "87686006", to: "87723197", min: Number.NaN, max: 90 },
+  ]);
+  assert.deepEqual(legFare(table, "INTERCITES", "StopArea:OCE87773002", "StopArea:OCE87586008"), [15, 60]);
+  assert.equal(legFare(table, "Train TER", "StopArea:OCE87586008", "StopArea:OCE87773002"), undefined);
+  assert.equal(legFare(table, "TGV INOUI", "StopArea:OCE87686006", "StopArea:OCE87723197"), undefined, "invalid prices are dropped");
 });
 
 test("upcomingDates retourne les vendredis, samedis et dimanches à venir", () => {
   assert.deepEqual(upcomingDates("2026-09-15", 1, [5, 6, 0]), ["2026-09-18", "2026-09-19", "2026-09-20"]);
   assert.equal(upcomingDates("2026-09-15", 8, [5]).length, 8);
+});
+
+test("au-delà de l'horizon SNCF, le trajet est projeté depuis le dernier jour complet de même jour de semaine", async () => {
+  const { timetableDate } = await import("../lib/travel/rail-client.ts");
+  // Fridays 2027-04-16 (complete), 2027-04-23 (complete) and 2027-04-30 (partial, end of feed); Saturday 2027-04-24.
+  const index = { generatedAt: "2026-11-11T05:00:00Z", dates: ["2027-04-16", "2027-04-23", "2027-04-24", "2027-04-30"], pairs: { "2027-04-16": 1000, "2027-04-23": 990, "2027-04-24": 800, "2027-04-30": 300 } };
+  assert.deepEqual(timetableDate(index, "2027-04-23"), { date: "2027-04-23", projected: false });
+  assert.deepEqual(timetableDate(index, "2027-09-17"), { date: "2027-04-23", projected: true }, "skips the partial last Friday");
+  assert.deepEqual(timetableDate(index, "2027-06-12"), { date: "2027-04-24", projected: true });
+  assert.equal(timetableDate(index, "2027-06-14"), null, "no Monday is published");
+  assert.equal(timetableDate(index, "2027-11-19"), null, "more than a year after the build");
+  assert.equal(timetableDate(index, "2027-04-20"), null, "inside the horizon but not computed");
 });
