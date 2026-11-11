@@ -6,6 +6,10 @@ import {
   type Group, type Matrix,
 } from "../lib/travel/model.ts";
 
+// Test fixtures, independent of the app's default groups.
+const clermont: Group = { id: "a", name: "A", place: "clermont", choice: "car", note: "", access: 0 };
+const lyon: Group = { ...clermont, id: "b", place: "lyon" };
+const thouars: Group = { ...clermont, id: "c", place: "sainte-verge", railPlace: "thouars" };
 const leg = (minutes: number) => ({ minutes, source: "test", retrievedAt: "2026-01-01" });
 const matrixFor = (groups: Group[], destination: string, out: number, back = out): Matrix =>
   Object.fromEntries(groups.map((g) => {
@@ -13,8 +17,15 @@ const matrixFor = (groups: Group[], destination: string, out: number, back = out
     return [tripKey(originFor(g, mode), destination, mode), { out: leg(out), back: leg(back) }];
   }));
 
-test("16 scénarios sont produits pour les choix both/train", () => {
-  assert.equal(scenarios(initialGroups).length, 2 ** 4);
+test("les groupes par défaut sont neutres (aucune donnée personnelle)", () => {
+  for (const g of initialGroups) {
+    assert.match(g.name, /^Groupe \d+$/);
+    assert.equal(g.note, "");
+  }
+});
+
+test("2 groupes flexibles et 1 groupe train donnent 4 scénarios", () => {
+  assert.equal(scenarios(initialGroups).length, 2 ** 2);
 });
 
 test("un groupe both alterne car et train", () => {
@@ -23,26 +34,14 @@ test("un groupe both alterne car et train", () => {
 });
 
 test("un groupe train reste train dans les scénarios", () => {
-  const g = [{ ...initialGroups.find((x) => x.id === "g4")! }];
+  const g = [{ ...initialGroups[0], choice: "train" as const }];
   assert.deepEqual(scenarios(g), [["train"]]);
 });
 
-test("Groupe 4 est bien contraint au train", () => {
-  const g4 = initialGroups.find((g) => g.id === "g4")!;
-  assert.equal(g4.choice, "train");
-  assert.equal(originFor(g4, "train"), "mulhouse");
-});
-
-test("Groupe 6 est bien contraint au train", () => {
-  const g6 = initialGroups.find((g) => g.id === "g6")!;
-  assert.equal(g6.choice, "train");
-  assert.equal(originFor(g6, "train"), "paris");
-});
-
-test("Groupe 1 utilise Thouars comme origine ferroviaire", () => {
-  const g1 = initialGroups[0];
-  assert.equal(originFor(g1, "car"), "sainte-verge");
-  assert.equal(originFor(g1, "train"), "thouars");
+test("un départ ferroviaire distinct remplace la ville pour le train seulement", () => {
+  const g = { ...initialGroups[0], place: "sainte-verge", railPlace: "thouars" };
+  assert.equal(originFor(g, "car"), "sainte-verge");
+  assert.equal(originFor(g, "train"), "thouars");
 });
 
 test("la clé de trajet distingue origine, destination et mode", () => {
@@ -51,7 +50,7 @@ test("la clé de trajet distingue origine, destination et mode", () => {
 });
 
 test("un aller et retour complet est marqué complete", () => {
-  const groups = [{ ...initialGroups[1], choice: "car" as const }];
+  const groups = [{ ...clermont, choice: "car" as const }];
   const result = rank(groups, ["dijon"], ["car"], matrixFor(groups, "dijon", 100, 120))[0];
   assert.equal(result.complete, true);
   assert.equal(result.max, 120);
@@ -59,7 +58,7 @@ test("un aller et retour complet est marqué complete", () => {
 });
 
 test("un trajet manquant exclut la destination du classement complet", () => {
-  const groups = [{ ...initialGroups[1], choice: "car" as const }];
+  const groups = [{ ...clermont, choice: "car" as const }];
   const matrix = matrixFor(groups, "dijon", 100);
   delete matrix[tripKey("clermont", "dijon", "car")];
   const result = rank(groups, ["dijon"], ["car"], matrix)[0];
@@ -70,7 +69,7 @@ test("un trajet manquant exclut la destination du classement complet", () => {
 });
 
 test("les minutes d'accès train sont ajoutées à l'aller et au retour", () => {
-  const group = { ...initialGroups[0], choice: "train" as const, access: 15 };
+  const group = { ...thouars, choice: "train" as const, access: 15 };
   const result = rank([group], ["dijon"], ["train"], {
     [tripKey("thouars", "dijon", "train")]: { out: leg(100), back: leg(120) },
   })[0];
@@ -78,7 +77,7 @@ test("les minutes d'accès train sont ajoutées à l'aller et au retour", () => 
 });
 
 test("le classement privilégie d'abord les destinations complètes", () => {
-  const groups = [{ ...initialGroups[1], choice: "car" as const }];
+  const groups = [{ ...clermont, choice: "car" as const }];
   const complete = matrixFor(groups, "dijon", 500);
   const incomplete = matrixFor(groups, "nevers", 1);
   delete incomplete[tripKey("clermont", "nevers", "car")];
@@ -87,13 +86,13 @@ test("le classement privilégie d'abord les destinations complètes", () => {
 });
 
 test("le minimax utilise le maximum de l'aller et du retour", () => {
-  const groups = [{ ...initialGroups[1], choice: "car" as const }];
+  const groups = [{ ...clermont, choice: "car" as const }];
   const result = rank(groups, ["dijon"], ["car"], matrixFor(groups, "dijon", 20, 80))[0];
   assert.equal(result.max, 80);
 });
 
 test("à minimax égal, le classement utilise la moyenne aller-retour", () => {
-  const groups = [{ ...initialGroups[1], choice: "car" as const }];
+  const groups = [{ ...clermont, choice: "car" as const }];
   const matrix: Matrix = {
     [tripKey("clermont", "dijon", "car")]: { out: leg(30), back: leg(70) },
     [tripKey("clermont", "nevers", "car")]: { out: leg(45), back: leg(55) },
@@ -103,15 +102,15 @@ test("à minimax égal, le classement utilise la moyenne aller-retour", () => {
 });
 
 test("la moyenne est calculée sur les deux sens", () => {
-  const groups = [{ ...initialGroups[1], choice: "car" as const }];
+  const groups = [{ ...clermont, choice: "car" as const }];
   const result = rank(groups, ["dijon"], ["car"], matrixFor(groups, "dijon", 20, 80))[0];
   assert.equal(result.mean, 50);
 });
 
 test("la moyenne agrège équitablement chaque groupe et chaque sens", () => {
   const groups = [
-    { ...initialGroups[1], choice: "car" as const },
-    { ...initialGroups[2], choice: "car" as const },
+    { ...clermont, choice: "car" as const },
+    { ...lyon, choice: "car" as const },
   ];
   const matrix: Matrix = {
     [tripKey("clermont", "dijon", "car")]: { out: leg(10), back: leg(30) },

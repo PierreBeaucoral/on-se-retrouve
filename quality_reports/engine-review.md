@@ -5,7 +5,7 @@ Périmètre : `lib/travel/model.ts` (lecture seule)
 
 ## Résultat
 
-La suite `tests/model.test.ts` couvre 16 combinaisons produites par `scenarios` et les invariants associés : contraintes train de Groupe 4 et Groupe 6, origine ferroviaire de Thouars pour Groupe 1, clés car/train, trajets incomplets, ajout du temps d'accès, classement complet puis minimax aller/retour puis moyenne, agrégation symétrique des groupes, validation des minutes et valeurs nulles/zéro.
+La suite `tests/model.test.ts` couvre les combinaisons produites par `scenarios` et les invariants associés : groupes contraints au train, départ ferroviaire distinct de la ville, clés car/train, trajets incomplets, ajout du temps d'accès, classement complet puis minimax aller/retour puis moyenne, agrégation symétrique des groupes, validation des minutes et valeurs nulles/zéro.
 
 Commande exécutée :
 

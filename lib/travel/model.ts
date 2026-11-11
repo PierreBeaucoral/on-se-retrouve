@@ -3,16 +3,16 @@ export type Choice = Mode | "both";
 import { places, type Place } from "./places.ts";
 export { places, type Place };
 export type Group = {id:string; name:string; place:string; railPlace?:string; choice:Choice; note:string; access:number};
+// Neutral placeholders: real groups live only in the visitor's browser (localStorage) or in a share link.
 export const initialGroups:Group[] = [
-{id:"g1",name:"Groupe 1",place:"sainte-verge",railPlace:"thouars",choice:"both",note:"",access:0},
-{id:"clermont",name:"Groupe 2",place:"clermont",choice:"both",note:"",access:0},
-{id:"g3",name:"Groupe 3",place:"lyon",choice:"both",note:"",access:0},
-{id:"g4",name:"Groupe 4",place:"mulhouse",choice:"train",note:"",access:0},
-{id:"g5",name:"Groupe 5",place:"lyon",choice:"both",note:"",access:0},
-{id:"g6",name:"Groupe 6",place:"paris",choice:"train",note:"",access:0},
+{id:"g1",name:"Groupe 1",place:"paris",choice:"both",note:"",access:0},
+{id:"g2",name:"Groupe 2",place:"lyon",choice:"both",note:"",access:0},
+{id:"g3",name:"Groupe 3",place:"bordeaux",choice:"train",note:"",access:0},
 ];
 export const defaultDestinations = ["bourges","nevers","dijon","tours","orleans","auxerre","macon","chalon","beaune","vichy","moulins","montlucon","poitiers","besancon","le-creusot","sens","lyon","clermont","paris","blois"];
-export type Leg = {minutes:number; source:string; departure?:string; arrival?:string; transfers?:number; via?:string[]; retrievedAt:string};
+// One train of a rail journey; fare = SNCF full-price range (2nd class, Tarif Normal) when published.
+export type Segment = {from:string; to:string; departure:string; arrival:string; brand:string; number:string; fare?:[number,number]};
+export type Leg = {minutes:number; source:string; departure?:string; arrival?:string; transfers?:number; via?:string[]; segments?:Segment[]; retrievedAt:string};
 export type Trip = {out?:Leg; back?:Leg; error?:string};
 export type Matrix = Record<string,Trip>;
 export const tripKey=(origin:string,dest:string,mode:Mode)=>`${origin}|${dest}|${mode}`;
