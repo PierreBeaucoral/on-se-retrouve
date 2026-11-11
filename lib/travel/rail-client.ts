@@ -74,8 +74,8 @@ export async function railLeg(origin: string, destination: string, requested: st
   return {
     minutes: arr - dep,
     source: source.projected
-      ? `Projection d'après les horaires SNCF du ${frDate(source.date)} (même jour de la semaine, au-delà des horaires publiés) · départs dès ${profile}`
-      : `SNCF · horaires théoriques (GTFS ${index.feedVersion}) · départs dès ${profile}`,
+      ? `Projection d'après les horaires SNCF du ${frDate(source.date)} (même jour de la semaine, au-delà des horaires publiés), départs dès ${profile}`
+      : `Horaires théoriques SNCF du ${frDate(index.feedVersion)}, départs dès ${profile}`,
     departure: `${date}T${formatMinutes(dep)}`,
     arrival: `${date}T${formatMinutes(arr)}`,
     transfers: journey.length - 1,

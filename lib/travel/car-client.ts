@@ -73,7 +73,7 @@ export async function carLeg(origin: string, destination: string, signal?: Abort
   const minutes = parseIgnDuration(payload);
   if (minutes === null) throw new Error("Durée routière indisponible.");
   const km = parseIgnDistance(payload);
-  const leg: Leg = { minutes, ...(km !== null ? { km } : {}), source: `IGN Géoplateforme${km !== null ? ` · ${km.toLocaleString("fr-FR")} km` : ""}`, retrievedAt: new Date().toISOString() };
+  const leg: Leg = { minutes, ...(km !== null ? { km } : {}), source: `IGN Géoplateforme${km !== null ? `, ${km.toLocaleString("fr-FR")} km` : ""}`, retrievedAt: new Date().toISOString() };
   const fresh = readCache();
   const now = Date.now();
   for (const k of Object.keys(fresh)) if (!(fresh[k]?.expires > now)) delete fresh[k];

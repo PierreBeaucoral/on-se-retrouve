@@ -8,7 +8,7 @@ export type TravelJob = { origin: string; destination: string; mode: Mode };
 export async function computeTrip(job: TravelJob, outbound: string, inbound: string, signal?: AbortSignal): Promise<Trip> {
   const { origin, destination, mode } = job;
   if (origin === destination) {
-    const leg = { minutes: 0, km: 0, segments: [], source: "Même ville · trajet local non inclus", retrievedAt: new Date().toISOString() };
+    const leg = { minutes: 0, km: 0, segments: [], source: "Même ville, trajet local non inclus", retrievedAt: new Date().toISOString() };
     return { out: leg, back: leg };
   }
   const run = (when: string, reverse: boolean) => mode === "car"
