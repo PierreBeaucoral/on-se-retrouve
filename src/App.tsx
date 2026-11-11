@@ -56,12 +56,12 @@ export default function Home(){
  function updateGroup(id:string,update:Partial<Group>){setGroups(gs=>gs.map(g=>g.id===id?{...g,...update}:g));setScenarioIndex(0);}
  async function calculate(){if(busy||!validDates||!destinations.length)return;const controller=new AbortController();abort.current=controller;setBusy(true);
  const jobs=new Map<string,{origin:string;destination:string;mode:Mode}>();for(const destination of destinations)for(const g of groups)for(const mode of (g.choice==="both"?["car","train"]:[g.choice]) as Mode[]){const origin=originFor(g,mode);const key=tripKey(origin,destination,mode);if(!matrix[key]?.out||!matrix[key]?.back)jobs.set(key,{origin,destination,mode});}
- setProgress({done:0,total:jobs.size});let done=0,failures=0;
+ setProgress({done:0,total:jobs.size});let done=0;const failures={car:0,train:0};
  try{for(const [key,job] of jobs){if(controller.signal.aborted)break;setStatus(`Calcul en cours : ${done+1} sur ${jobs.size} (${modeName(job.mode).toLowerCase()}, ${nameOf(job.origin)} → ${nameOf(job.destination)})`);
  let result:Trip;
  try{result=await computeTrip(job,outbound,inbound,controller.signal);}catch{if(controller.signal.aborted)break;result={error:"Calcul impossible pour ce trajet. Vous pouvez réessayer."};}
- if(!result.out||!result.back)failures++;setMatrix(prev=>({...prev,[key]:result}));setProgress({done:++done,total:jobs.size});}
- setStatus(controller.signal.aborted?"Calcul arrêté. Les trajets obtenus restent disponibles.":jobs.size===0?"Les trajets de ce week-end sont déjà calculés.":`Calcul terminé. ${failures?`${failures} trajets aller-retour restent à compléter.`:"Tous les trajets sont disponibles."}`);
+ if(!result.out||!result.back)failures[job.mode]++;setMatrix(prev=>({...prev,[key]:result}));setProgress({done:++done,total:jobs.size});}
+ setStatus(controller.signal.aborted?"Calcul arrêté. Les trajets obtenus restent disponibles.":jobs.size===0?"Les trajets de ce week-end sont déjà calculés.":`Calcul terminé. ${failures.car+failures.train===0?"Tous les trajets sont disponibles.":`Restent à compléter : ${[failures.car?`${failures.car} aller-retour en voiture`:"",failures.train?`${failures.train} en train`:""].filter(Boolean).join(" et ")}.`}`);
  }finally{setBusy(false);abort.current=null;}}
  function setManualLeg(g:Group,direction:"out"|"back",value:string){if(!active)return;const key=tripKey(originFor(g,"train"),active.id,"train");setManual(prev=>{const t={...(prev[key]||matrix[key]||{})};delete t.error;if(value===""){delete t[direction];}else{const n=Number(value);if(!validMinutes(n))return prev;t[direction]={minutes:n,source:`Saisie manuelle, ${manualSource.trim()||"source non précisée"}`,retrievedAt:new Date().toISOString()};}return {...prev,[key]:t};});}
  // Browser agents use the same scenario state as the controls.

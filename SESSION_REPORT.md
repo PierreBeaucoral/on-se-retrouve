@@ -108,3 +108,25 @@
 **Status:**
 - Done: 156-city app live with weekly refresh over the whole feed horizon.
 - Pending: nothing. Whole-France "any station" search remains a possible next phase (browser-side routing).
+
+## 2026-11-11/12 — GDPR scrub, train details and fares, costs, projection, communes, redesign
+
+**Operations:**
+- Personal names and household details removed from defaults, tests, reports and all 13 commits (filter-branch, force-push approved by the owner); share link via URL fragment; neutral "Groupe 1–3" defaults.
+- Rail files store every train (stations, times, brand, number) and SNCF open-data fares (TGV INOUI, OUIGO, Intercités); compact per-origin format (`packOrigin`), ~8 MB/date.
+- TER: SNCF withdrew its TER fare datasets in late 2025. Exact 2025 fares for PACA and Pays de la Loire (Web Archive, `data/ter-fares-2025.csv`), wide pooled estimate elsewhere, labelled; weekly CI job watches for their return.
+- Cost per destination, group and person (car km × editable rate, train fare × travellers); projection up to a year beyond the SNCF horizon; any commune as a departure (geo.api.gouv.fr).
+- Design: diagnostic (45/100) fully applied, then the owner chose concept A "Carnet de route" with concept C controls; fonts self-hosted.
+
+**Decisions:**
+- Single-region TER fit rejected: the PACA fit misses Pays de la Loire fares by 27 % (median).
+- Worker-thread parallel rail build proposed and declined (risk of silent missing dates; rare benefit).
+
+**Results:**
+- Live: 73 dates (13/11/2026 → 30/04/2027); fully priced journeys on a sample Friday 16.5 % → 93.9 %.
+- Deploy runs 43109070007 (features) and b66c72a (TER + redesign) succeeded; live checks on phone and desktop: answer, tickets, fares, TER labels, self-hosted fonts, no personal names.
+- IGN routing returned 502/504 all night (external): car legs fail, the alert offers the train ranking.
+
+**Status:**
+- Done: all of the above live.
+- Pending: car routes depend on IGN recovering; TER estimate stays wide for 9 of 11 regions until SNCF republishes fares.
