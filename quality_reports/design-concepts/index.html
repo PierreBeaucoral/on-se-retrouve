@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trois pistes</title>
+<meta name="description" content="Trois directions de design pour On se retrouve, avec captures à 1440 et 390 px.">
+<meta name="color-scheme" content="light dark">
+<style>
+:root{--bg:#F4F5F3;--surface:#FFFFFF;--ink:#1A222B;--ink-2:#4A5560;--rule:#D2D8DD;--link:#1F5FA8;--focus:#1F5FA8;
+  --font:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#11161B;--surface:#1A2128;--ink:#E7ECEF;--ink-2:#A8B3BC;--rule:#2E3943;--link:#8FC1FF;--focus:#8FC1FF}}
+:root[data-theme="dark"]{--bg:#11161B;--surface:#1A2128;--ink:#E7ECEF;--ink-2:#A8B3BC;--rule:#2E3943;--link:#8FC1FF;--focus:#8FC1FF}
+*,*::before,*::after{box-sizing:border-box}
+html,body{overflow-x:clip}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 1.0625rem/1.55 var(--font)}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+a{color:var(--link);text-underline-offset:3px}
+main{max-width:1120px;margin:0 auto;padding:40px 16px 64px}
+h1{font-size:clamp(1.75rem,4vw,2.5rem);line-height:1.15;margin:0 0 10px}
+.intro{max-width:62ch;color:var(--ink-2);margin:0 0 32px}
+.c{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:28px;align-items:start;padding:28px 0;border-top:1px solid var(--rule)}
+.c h2{font-size:1.5rem;margin:0 0 8px}
+.c p{margin:0 0 12px;max-width:58ch}
+.links{display:flex;flex-wrap:wrap;gap:8px}
+.links a{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border:1px solid var(--rule);border-radius:10px;background:var(--surface);color:var(--link);font-weight:600;text-decoration:none}
+.links a.main{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.shots{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,1fr);gap:12px;align-items:start}
+.shots img{display:block;width:100%;height:auto;border:1px solid var(--rule);border-radius:8px;background:var(--surface)}
+.note{color:var(--ink-2);font-size:.9375rem;margin-top:24px;border-top:1px solid var(--rule);padding-top:20px}
+@media (max-width:760px){.c{grid-template-columns:minmax(0,1fr)}}
+</style>
+</head>
+<body>
+<main>
+  <h1>On se retrouve&#8239;: trois pistes de design</h1>
+  <p class="intro">Trois directions franchement différentes pour l’écran de résultat, chacune montrée sur ordinateur et sur téléphone, en clair et en sombre. Les chiffres viennent d’un vrai calcul de l’application (week-end du 13 au 15 novembre 2026, groupes partant de Paris, Lyon et Bordeaux). La comparaison et la recommandation sont dans <a href="README.md">README.md</a>.</p>
+
+  <section class="c" aria-labelledby="a">
+    <div>
+      <h2 id="a">A. Carnet de route</h2>
+      <p>La réponse d’abord, en grand titre&#8239;: «&nbsp;Rendez-vous à Paris.&nbsp;» Chaque groupe reçoit ensuite un billet, avec l’aller, le retour, le numéro de train et le prix sur le talon détachable. Papier vert-gris, encre de composteur, un serif de titrage. On garde la page unique de l’application actuelle&#8239;; on change la hiérarchie et le ton, pas la structure.</p>
+      <div class="links"><a class="main" href="concept-a.html">Ouvrir la maquette</a><a href="shots/concept-a-390.png">Téléphone</a><a href="shots/concept-a-390-dark.png">Sombre</a></div>
+    </div>
+    <div class="shots"><img src="shots/concept-a-1440.png" alt="Concept A sur ordinateur : titre Rendez-vous à Paris, carte, billets par groupe, classement et formulaire."><img src="shots/concept-a-390-fold.png" alt="Concept A sur téléphone : la réponse et la carte au premier écran."></div>
+  </section>
+
+  <section class="c" aria-labelledby="b">
+    <div>
+      <h2 id="b">B. Carte d’abord</h2>
+      <p>La carte occupe l’écran. Chaque ville comparée porte une étiquette avec son rang et son trajet le plus long, la gagnante en jaune de carte routière. Le résultat vit dans un panneau latéral sur ordinateur et dans une feuille qui remonte sur téléphone&#8239;; le formulaire flotte sur la mer. C’est la piste la plus spectaculaire, et la plus chère à bien faire.</p>
+      <div class="links"><a class="main" href="concept-b.html">Ouvrir la maquette</a><a href="shots/concept-b-1440-full.png">Page entière</a><a href="shots/concept-b-390.png">Téléphone</a><a href="shots/concept-b-390-dark.png">Sombre</a></div>
+    </div>
+    <div class="shots"><img src="shots/concept-b-1440.png" alt="Concept B sur ordinateur : carte plein écran avec étiquettes de classement, formulaire flottant, panneau de résultat à droite."><img src="shots/concept-b-390-fold.png" alt="Concept B sur téléphone : la carte puis la feuille de résultat."></div>
+  </section>
+
+  <section class="c" aria-labelledby="c">
+    <div>
+      <h2 id="c">C. Pas à pas</h2>
+      <p>Trois questions&#8239;: Qui part&#8239;? Quand&#8239;? Où se retrouver&#8239;? De gros boutons (52&nbsp;px), une police conçue pour les malvoyants, des réponses en phrases («&nbsp;Départ 15:04, Lyon Part-Dieu&nbsp;»). Le transport se choisit d’un toucher, le nombre de personnes avec − et +, le week-end parmi trois cartes. Pensé pour les grands-parents sur téléphone.</p>
+      <div class="links"><a class="main" href="concept-c.html">Ouvrir la maquette</a><a href="shots/concept-c-390.png">Téléphone</a><a href="shots/concept-c-390-dark.png">Sombre</a></div>
+    </div>
+    <div class="shots"><img src="shots/concept-c-1440.png" alt="Concept C sur ordinateur : réponses à gauche, verdict À Paris et trains du groupe 2 à droite."><img src="shots/concept-c-390-fold.png" alt="Concept C sur téléphone : étapes, puis le verdict À Paris."></div>
+  </section>
+
+  <p class="note">Maquettes statiques&#8239;: aucun bouton ne calcule. Les polices viennent de Google Fonts dans ces maquettes&#8239;; en production elles seraient auto-hébergées.</p>
+</main>
+</body>
+</html>

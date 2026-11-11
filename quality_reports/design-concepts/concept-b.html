@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Carte d’abord</title>
+<meta name="description" content="Concept B pour On se retrouve : la carte en plein écran, le classement en panneau latéral ou en feuille sur téléphone.">
+<meta name="color-scheme" content="light dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Concept B · Carte d'abord · map-led, road-map vernacular
+ * sea/land cartography neutrals · single accent: road-map yellow, used only as a fill under dark text
+ * display Barlow Semi Condensed (signage) + body Barlow · Mockup only, sample figures from the 11/11/2026 run. */
+:root{
+  --sea:#C9D7E1; --land:#F6F6F2; --land-stroke:#AEBAC1; --dot:#6B7983;
+  --surface:#FFFFFF; --surface-2:#EEF1F3; --rule:#D3DADF;
+  --ink:#14202A; --ink-2:#48555F; --route:#14202A;
+  --win:#F4C21B; --on-win:#14202A; --chip:#FFFFFF; --chip-line:#14202A;
+  --btn:#14202A; --on-btn:#FFFFFF; --focus:#0B62C4;
+  --shadow:0 10px 30px rgba(20,32,42,.14);
+  --font-display:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;
+  --font-body:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --r:14px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --sea:#0A151D; --land:#1A252E; --land-stroke:#34434E; --dot:#8C9AA4;
+  --surface:#111A21; --surface-2:#1A242C; --rule:#2B3843;
+  --ink:#E8EDF0; --ink-2:#A4B1BA; --route:#E8EDF0;
+  --win:#F4C21B; --on-win:#14202A; --chip:#22303A; --chip-line:#E8EDF0;
+  --btn:#E8EDF0; --on-btn:#14202A; --focus:#7DB8FF;
+  --shadow:0 10px 30px rgba(0,0,0,.45);
+}}
+:root[data-theme="dark"]{
+  --sea:#0A151D; --land:#1A252E; --land-stroke:#34434E; --dot:#8C9AA4;
+  --surface:#111A21; --surface-2:#1A242C; --rule:#2B3843;
+  --ink:#E8EDF0; --ink-2:#A4B1BA; --route:#E8EDF0;
+  --win:#F4C21B; --on-win:#14202A; --chip:#22303A; --chip-line:#E8EDF0;
+  --btn:#E8EDF0; --on-btn:#14202A; --focus:#7DB8FF;
+  --shadow:0 10px 30px rgba(0,0,0,.45);
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{overflow-x:clip}
+body{margin:0;background:var(--sea);color:var(--ink);font:400 1.0625rem/1.5 var(--font-body);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-underline-offset:3px}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+h1,h2,h3{font-family:var(--font-display);font-weight:600;font-style:normal;margin:0;letter-spacing:-.005em}
+input,select,button,.hit{min-height:44px;font:inherit}
+.muted{color:var(--ink-2)}
+
+/* layout: map column + side panel */
+.stage{display:grid;grid-template-columns:minmax(0,1fr) 480px;min-height:100dvh}
+.mapcol{position:sticky;top:0;height:100dvh;grid-row:1/span 2;background:var(--sea);overflow:hidden}
+.panel{grid-column:2;background:var(--surface);padding:28px 28px 8px;border-left:1px solid var(--rule)}
+.notes{grid-column:2;background:var(--surface);padding:8px 28px 32px;font-size:.9375rem;color:var(--ink-2)}
+
+/* floating bar */
+.bar{position:absolute;top:20px;left:20px;right:20px;display:flex;align-items:center;gap:12px;z-index:2}
+.brand{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;background:var(--surface);border-radius:999px;font:700 1.125rem var(--font-display);text-decoration:none;box-shadow:var(--shadow)}
+.legend{display:flex;gap:16px;align-items:center;margin-left:auto;padding:0 16px;min-height:44px;background:var(--surface);border-radius:999px;font-size:.9375rem;box-shadow:var(--shadow)}
+.legend i{display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:-1px}
+.legend .o{background:var(--ink);border-radius:2px}
+.legend .d{background:var(--dot);border-radius:50%}
+.legend .w{background:var(--win);border:1.5px solid var(--chip-line);border-radius:3px}
+
+/* map */
+.map{position:absolute;inset:84px 0 0 380px;margin:0;display:flex;align-items:center;justify-content:center}
+.map svg{width:100%;height:100%;max-height:calc(100dvh - 110px)}
+.map figcaption{position:absolute;right:20px;bottom:16px;font-size:.875rem;background:var(--surface);color:var(--ink-2);padding:6px 12px;border-radius:999px}
+.land{fill:var(--land);stroke:var(--land-stroke);stroke-width:.8}
+.dot{fill:var(--dot)}
+.route{stroke:var(--route);stroke-width:3;fill:none;stroke-linecap:round}
+.leg-time rect{fill:var(--surface);stroke:var(--route);stroke-width:1.5}
+.leg-time text{font:600 15px var(--font-display);fill:var(--ink)}
+.chip rect{fill:var(--chip);stroke:var(--chip-line);stroke-width:1.5}
+.chip text{font:600 17px var(--font-display);fill:var(--ink)}
+.chip.win rect{fill:var(--win);stroke:var(--on-win);stroke-width:2}
+.chip.win text{fill:var(--on-win);font-size:21px;font-weight:700}
+.chip-dot{fill:var(--ink);stroke:var(--surface);stroke-width:2}
+.origin rect{fill:var(--ink)}
+.origin text{font:700 15px var(--font-display);fill:var(--surface)}
+.olabel{font:600 15px var(--font-body);fill:var(--ink);paint-order:stroke;stroke:var(--land);stroke-width:4px;stroke-linejoin:round}
+
+/* inputs card floating on the map (desktop) */
+.inputs{position:absolute;left:20px;top:84px;width:340px;z-index:2;background:var(--surface);border-radius:var(--r);box-shadow:var(--shadow);padding:18px}
+.inputs h2{font-size:1.25rem;margin-bottom:6px}
+.grp{display:grid;grid-template-columns:minmax(0,1fr) 92px 58px;gap:6px;margin-bottom:6px}
+.grp input,.grp select,.dates input{width:100%;padding:0 10px;border:1px solid var(--ink-2);border-radius:8px;background:var(--surface);color:var(--ink)}
+.grp-name{grid-column:1/-1;font-size:.875rem;font-weight:600;margin-top:6px}
+.add{display:inline-flex;align-items:center;min-height:44px;font-weight:600;font-size:.9375rem}
+.dates{display:grid;grid-template-columns:minmax(0,1fr) 112px;gap:6px;margin-top:4px}
+.dates label{grid-column:1/-1;font-size:.875rem;font-weight:600;margin-top:6px}
+.go{width:100%;margin-top:14px;border:0;border-radius:10px;background:var(--btn);color:var(--on-btn);font-weight:700;font-size:1.0625rem;cursor:pointer}
+.go:active{transform:translateY(1px)}
+
+/* panel content */
+.answer h1{font-size:clamp(2.25rem,4vw,3rem);line-height:1.02}
+.answer h1 mark{background:var(--win);color:var(--on-win);padding:0 .14em;border-radius:6px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.answer p{margin:12px 0 0;font-size:1.125rem}
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:18px 0 0}
+.kpis div{background:var(--surface-2);border-radius:10px;padding:10px 12px}
+.kpis b{display:block;font:700 1.375rem/1.1 var(--font-display)}
+.kpis span{font-size:.8125rem;color:var(--ink-2)}
+.blk{padding:22px 0;border-top:1px solid var(--rule);margin-top:22px}
+.blk h2{font-size:1.375rem;margin-bottom:10px}
+.rank{list-style:none;margin:0;padding:0}
+.rank a{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;gap:12px;min-height:56px;padding:6px 8px;border-radius:10px;text-decoration:none}
+.rank a:hover{background:var(--surface-2)}
+.badge{display:inline-flex;align-items:center;justify-content:center;width:36px;height:30px;border:1.5px solid var(--chip-line);border-radius:6px;font:700 1rem var(--font-display);background:var(--chip)}
+.rank .sel{background:var(--surface-2)}
+.rank .sel .badge{background:var(--win);color:var(--on-win);border-color:var(--on-win)}
+.rank .city{font-weight:600}
+.rank .city small{display:block;font-weight:400;font-size:.875rem;color:var(--ink-2)}
+.rank .max{font:700 1.25rem var(--font-display)}
+.more{display:inline-flex;align-items:center;min-height:44px;font-size:.9375rem;font-weight:600}
+
+.group{border:1px solid var(--rule);border-radius:var(--r);padding:14px 16px;margin-bottom:10px}
+.group-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.group-head h3{font-size:1.1875rem}
+.group-head .t{font:700 1.125rem var(--font-display)}
+.group .sub{font-size:.9375rem;color:var(--ink-2);margin:2px 0 0}
+.line{list-style:none;margin:12px 0 0;padding:0 0 0 22px;position:relative}
+.line::before{content:"";position:absolute;left:6px;top:10px;bottom:10px;width:3px;background:var(--route);border-radius:2px}
+.line li{position:relative;padding:3px 0}
+.line li.stop::before{content:"";position:absolute;left:-21px;top:9px;width:11px;height:11px;border-radius:50%;background:var(--surface);border:3px solid var(--route)}
+.line .hm{font:700 1.0625rem var(--font-display);margin-right:8px}
+.line .train{font-size:.9375rem;color:var(--ink-2);padding:2px 0 2px 2px}
+.line .train b{color:var(--ink);font-weight:600}
+.leg-title{margin:14px 0 0;font-size:.875rem;font-weight:700}
+.cost{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;padding-top:12px;border-top:1px dashed var(--rule)}
+.cost b{font:700 1.25rem var(--font-display)}
+.notes p{margin:0 0 8px}
+
+/* phone: map on top, panel becomes a bottom sheet, inputs follow */
+@media (max-width:1180px){
+  .stage{display:flex;flex-direction:column}
+  .mapcol{display:contents}
+  .bar{position:sticky;top:0;left:auto;right:auto;order:0;padding:10px 16px;background:var(--sea);z-index:3}
+  .legend{display:none}
+  .map{position:relative;inset:auto;order:1;padding:0 4px 30px;max-width:760px;margin:0 auto;width:100%}
+  .map svg{max-height:none;height:auto}
+  .map figcaption{right:16px;left:16px;bottom:40px;border-radius:12px}
+  .panel{order:2;border-left:0;border-radius:22px 22px 0 0;margin-top:-26px;position:relative;padding:12px 16px 4px;box-shadow:0 -6px 24px rgba(20,32,42,.12)}
+  .panel::before{content:"";display:block;width:44px;height:5px;border-radius:3px;background:var(--rule);margin:0 auto 14px}
+  .inputs{position:static;order:3;width:auto;border-radius:0;box-shadow:none;padding:4px 16px 18px;border-top:1px solid var(--rule)}
+  .inputs h2{padding-top:18px}
+  .notes{order:4;padding:8px 16px 32px;border-top:1px solid var(--rule)}
+  .kpis b{font-size:1.1875rem}
+}
+@media (max-width:640px){
+  .chip text{font-size:22px}.chip.win text{font-size:26px}
+  .olabel{font-size:20px}
+  .leg-time{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="mapcol">
+    <header class="bar">
+      <a class="brand" href="#">On se retrouve</a>
+      <div class="legend" aria-hidden="true"><span><i class="o"></i>Départs</span><span><i class="d"></i>Villes comparées</span><span><i class="w"></i>Meilleur compromis</span></div>
+    </header>
+
+    <figure class="map">
+      <svg viewBox="0 0 590 575" role="img" aria-label="Carte des départs (Paris, Lyon, Bordeaux) et des villes comparées. Paris est le meilleur compromis : 2 h 10 au plus.">
+        <path class="land" d="M340,138 342,136 347,139 348,137 359,137 360,135 364,136 364,142 368,146 370,146 371,148 372,147 373,150 377,152 374,158 377,159 376,163 380,166 377,169 376,172 374,172 374,180 359,182 358,186 359,188 354,194 349,197 349,194 345,197 336,197 334,196 337,193 333,188 332,185 329,184 327,185 323,183 322,186 314,187 314,180 312,179 312,176 310,177 307,175 306,170 298,164 297,161 299,158 292,140 299,138 303,128 305,132 310,133 318,130 326,133 328,131 340,138ZM352,234 354,239 352,247 356,250 358,263 360,265 358,279 355,279 347,284 345,282 341,288 339,288 341,294 330,297 327,303 319,303 314,301 307,302 307,300 304,301 304,304 302,303 300,305 296,304 295,302 290,307 288,304 282,306 280,305 282,302 279,301 279,297 269,292 270,285 261,273 260,268 255,266 256,269 245,271 244,263 240,263 239,260 234,259 233,256 234,249 239,243 241,229 248,231 246,228 250,228 257,224 255,222 262,215 263,211 267,208 265,200 266,200 267,196 269,196 265,193 266,191 263,185 271,180 272,172 267,168 265,163 268,160 278,158 278,156 286,157 289,156 288,153 292,151 292,146 294,146 299,158 297,161 298,164 306,170 307,175 310,177 312,176 312,179 314,180 314,187 322,186 323,183 327,185 329,184 332,185 333,188 336,191 336,195 334,196 336,197 345,197 349,194 349,197 354,194 358,196 362,206 357,211 358,218 351,219 356,231 351,232 352,234ZM383,282 381,282 382,284 380,284 380,287 376,288 375,284 372,286 368,284 365,286 358,279 360,265 358,263 356,250 352,247 354,239 351,233 356,231 355,227 351,222 351,219 358,218 357,211 362,206 358,196 354,194 359,188 358,186 359,182 372,182 373,180 375,182 378,182 383,189 381,193 384,193 385,196 388,194 394,204 393,206 395,205 395,208 404,209 406,207 408,208 408,206 411,209 412,207 423,206 422,205 423,203 432,204 432,207 435,208 434,210 435,211 437,209 441,216 438,218 439,223 442,223 446,226 448,224 452,231 454,229 456,230 458,225 463,225 465,223 466,225 470,224 470,217 473,213 475,214 480,208 480,206 481,209 485,204 489,203 490,208 493,209 498,207 503,211 509,208 519,216 519,218 525,221 527,225 525,228 531,233 530,236 524,236 525,239 520,243 526,243 527,246 523,249 523,251 514,260 512,264 501,271 502,280 488,293 490,295 487,301 479,311 471,312 471,309 468,308 464,312 461,312 461,309 457,307 454,303 454,301 450,300 449,297 443,299 438,297 432,318 430,318 430,314 428,313 429,311 426,310 425,312 422,310 420,312 416,310 415,315 411,319 408,317 398,318 394,315 395,310 398,309 399,300 388,295 383,282ZM184,121 186,119 192,118 196,120 214,122 222,125 227,124 236,118 245,115 236,114 234,111 239,99 255,90 277,85 289,77 292,77 303,87 306,96 302,100 305,100 303,103 304,109 303,111 306,111 303,117 307,126 306,127 303,126 299,138 292,139 294,146 292,147 292,151 288,153 289,156 284,158 278,156 278,158 268,160 265,163 267,168 272,172 271,180 264,183 264,187 266,191 263,193 258,188 254,189 251,186 247,184 247,178 244,175 238,176 234,181 229,181 229,176 225,176 225,172 222,170 220,171 220,173 210,173 204,177 203,174 199,178 195,174 191,173 189,174 180,171 173,176 168,174 165,166 169,166 172,164 165,159 164,153 166,147 163,138 164,128 162,129 159,122 155,120 152,109 154,104 149,101 149,98 163,103 171,99 178,99 179,105 177,106 176,109 182,117 181,119 184,121ZM401,117 400,120 393,117 393,120 384,123 385,130 388,133 383,133 384,138 382,141 385,142 376,153 373,150 372,147 371,148 364,142 363,136 360,135 356,138 348,137 347,139 342,136 340,138 336,136 328,131 326,133 318,130 310,133 305,132 303,126 306,127 307,126 303,117 306,111 303,111 304,109 303,103 305,100 302,100 306,96 301,86 292,77 289,77 295,68 296,67 298,69 302,69 296,63 296,59 300,59 296,56 298,47 299,47 297,45 297,37 298,33 298,27 306,21 338,13 342,22 340,24 342,30 345,30 349,36 353,38 358,33 363,32 368,37 369,48 373,50 377,48 379,48 378,50 382,50 385,53 385,58 387,62 388,59 395,60 400,58 404,64 408,65 404,72 407,72 409,76 405,79 405,82 409,83 408,86 410,87 408,94 409,96 403,104 400,105 402,107 401,117ZM409,83 420,84 427,81 428,76 431,72 436,71 432,82 436,86 435,93 441,93 448,100 452,99 455,102 454,105 459,106 461,112 474,108 478,112 482,112 482,115 494,111 506,117 507,121 513,129 514,132 518,133 518,129 522,129 526,131 527,136 529,134 537,135 544,131 546,132 547,137 552,139 558,139 561,140 564,139 577,145 571,154 566,158 559,168 556,184 549,197 549,203 551,206 547,223 550,230 546,233 545,237 543,236 543,239 535,240 532,239 533,236 530,235 529,230 525,228 527,225 525,221 519,218 519,216 509,208 503,211 498,207 492,208 489,203 485,204 481,209 480,206 475,214 473,213 470,217 470,224 466,225 465,223 463,225 458,225 456,230 454,229 452,231 448,224 446,226 442,223 439,223 438,218 441,216 437,209 435,211 434,210 435,208 432,207 432,204 423,203 422,205 423,206 412,207 411,209 408,206 408,208 406,207 404,209 397,209 395,208 395,205 393,206 394,204 388,194 385,196 384,193 381,193 383,188 378,182 375,182 373,175 375,174 374,172 376,172 377,169 380,166 376,163 377,159 374,158 385,142 382,141 384,138 383,133 388,133 385,130 384,123 393,120 393,117 400,120 402,107 400,105 403,104 409,96 408,94 410,87 408,86 409,83ZM128,239 129,237 134,238 136,235 141,236 143,233 144,226 153,223 161,223 163,219 169,217 169,215 179,218 183,207 188,205 185,188 187,184 186,178 186,173 189,174 191,173 195,174 199,178 203,174 204,177 210,173 220,173 221,170 225,172 225,176 229,176 229,181 234,181 238,176 244,175 247,178 248,185 251,186 254,189 258,188 261,192 269,195 267,196 266,200 265,200 267,208 263,211 264,215 255,222 257,224 250,228 246,228 248,231 241,229 239,243 234,249 233,256 231,257 227,263 224,262 225,260 223,260 214,262 210,261 205,267 198,266 194,268 196,271 196,274 201,278 200,281 205,290 204,303 208,305 201,310 196,307 192,309 192,306 190,306 184,309 181,309 180,312 175,307 169,307 168,304 155,298 153,291 141,278 140,273 148,265 145,261 137,258 140,256 139,249 134,252 131,249 128,250 125,249 126,246 124,243 128,239ZM134,285 133,286 130,284 134,285ZM139,270 134,267 135,265 138,266 137,268 141,271 140,272 139,270ZM77,164 81,163 82,158 81,156 83,153 87,155 96,151 96,153 101,151 101,153 104,154 103,156 108,158 107,160 112,164 113,168 117,170 118,173 127,164 134,163 133,166 136,165 140,169 142,167 141,165 144,165 149,171 146,164 152,161 154,162 152,164 154,166 165,166 168,174 171,176 175,175 178,171 186,173 187,184 185,188 188,205 183,207 179,218 169,215 169,217 163,219 161,223 145,225 143,227 143,233 141,236 136,235 132,238 129,237 127,239 126,236 128,236 127,235 120,233 118,236 114,236 109,233 113,232 115,233 117,231 115,227 109,231 100,231 101,237 100,237 99,231 96,227 100,223 98,221 96,227 90,221 86,223 83,220 83,214 82,219 74,217 71,218 64,210 64,214 56,214 56,212 55,217 48,217 48,213 45,207 40,204 34,203 33,201 47,198 50,199 52,196 50,193 44,190 40,194 40,190 38,188 40,184 41,187 54,186 48,183 44,184 45,180 37,184 35,183 31,184 30,179 32,170 48,163 54,164 55,162 61,162 64,160 65,164 67,163 69,166 71,161 77,162 77,164ZM17,178 17,175 19,176 17,178ZM97,244 103,247 101,249 98,248 95,247 94,244 97,244ZM290,307 295,302 296,304 300,305 302,303 304,304 304,301 307,300 307,302 314,301 319,303 327,303 329,308 331,308 333,311 335,311 339,318 338,323 341,330 336,337 331,339 337,347 337,351 334,354 337,356 335,365 337,367 330,366 330,370 323,378 322,386 319,387 321,391 313,393 311,392 306,395 299,389 296,388 290,390 291,398 286,403 286,407 279,411 276,417 272,419 276,429 272,430 269,429 268,433 271,436 269,440 267,441 267,445 264,444 259,451 255,448 247,452 244,453 240,451 238,454 234,454 233,459 230,457 231,455 229,454 221,459 223,460 223,464 221,464 223,469 221,471 219,476 221,478 227,478 229,483 228,488 231,488 232,493 229,496 230,498 228,504 226,503 223,508 223,512 219,514 217,525 215,527 210,525 208,528 201,521 199,517 191,517 178,512 176,510 177,507 174,509 174,513 170,512 169,509 172,507 173,499 168,496 163,499 163,496 158,496 156,491 164,488 170,476 176,445 178,419 180,413 182,411 188,412 182,405 178,413 183,359 186,356 187,359 196,367 202,386 205,390 206,388 203,383 200,368 197,362 189,353 179,347 179,342 183,341 183,337 185,337 186,332 185,329 187,328 184,321 180,318 184,312 184,309 192,306 192,309 196,307 201,310 208,305 204,303 205,290 200,281 201,278 196,274 196,271 194,268 198,266 205,267 210,261 214,262 223,260 226,263 227,260 229,261 232,256 234,259 239,260 240,263 244,263 245,271 256,269 255,266 260,268 261,273 270,285 269,292 279,297 279,301 282,302 280,305 286,306 288,304 290,307ZM169,316 171,314 171,316 177,317 177,319 174,319 167,316 165,314 168,313 167,315 169,316ZM178,338 173,331 172,326 179,329 181,336 179,341 178,338ZM306,541 296,536 293,536 291,539 288,532 280,533 277,529 270,528 261,523 258,528 259,534 249,534 246,532 243,535 238,531 228,534 224,527 218,524 219,514 223,512 223,508 226,503 228,504 230,498 229,496 232,493 231,488 228,488 229,483 227,478 221,478 219,476 221,471 223,469 221,464 223,464 223,460 221,459 229,454 231,455 230,457 233,459 234,454 238,454 240,451 244,453 247,452 255,448 259,451 264,444 267,445 267,441 269,440 271,436 268,433 269,429 272,430 276,429 272,419 276,417 279,411 286,407 286,403 291,398 290,390 293,389 300,389 306,395 311,392 313,393 318,392 319,398 322,402 322,413 324,414 325,412 335,412 340,400 346,395 347,396 347,400 351,398 356,413 361,398 363,397 365,399 367,395 372,392 374,393 377,402 382,401 383,398 385,401 388,401 392,405 395,414 402,427 401,433 404,432 410,436 411,433 415,431 416,435 418,434 418,431 426,435 429,441 429,446 434,453 426,461 425,472 419,471 417,476 419,477 418,478 409,484 409,486 404,484 403,480 399,480 385,490 378,498 371,498 364,504 359,517 358,535 359,542 363,545 364,550 361,550 359,547 355,547 349,551 343,552 343,555 339,554 338,556 326,549 316,555 312,548 304,546 304,542 306,541ZM227,500 225,498 226,495 227,500ZM227,492 228,493 228,496 226,495 227,492ZM432,318 438,297 443,299 449,297 450,300 454,301 454,303 457,307 461,309 461,312 464,312 468,308 471,309 471,312 477,312 486,303 487,303 490,306 487,311 488,313 482,315 481,320 488,320 495,315 496,313 493,311 496,306 499,308 505,304 516,304 516,308 519,311 516,320 521,321 520,325 523,326 527,333 522,338 517,339 517,346 525,351 525,359 533,365 530,370 531,375 528,378 524,378 521,382 515,381 509,384 507,383 502,387 494,383 492,390 497,391 498,400 488,399 485,402 484,401 481,403 482,404 476,407 474,412 468,412 466,419 469,421 466,424 461,422 461,425 462,425 459,426 459,430 462,432 467,432 469,436 468,442 470,444 465,441 464,444 460,445 456,439 448,438 448,433 445,435 444,433 434,438 431,432 426,432 426,436 420,432 418,431 417,435 416,435 415,431 411,433 410,436 404,432 401,433 402,427 395,414 392,405 388,401 385,401 383,398 382,401 377,402 374,393 372,392 367,395 365,399 363,397 361,398 356,413 351,398 347,400 347,396 346,395 340,400 335,412 330,413 329,411 325,412 324,414 322,413 322,402 319,398 318,392 321,391 319,387 322,386 323,378 330,370 330,366 337,367 335,365 337,356 334,354 337,351 337,347 331,339 336,337 341,330 338,323 339,318 335,311 333,311 331,308 329,308 327,300 330,296 338,296 341,294 339,288 341,288 345,282 347,284 355,279 358,279 365,286 368,284 372,286 375,284 376,288 380,287 380,284 382,284 381,282 383,282 388,295 399,300 398,309 395,310 394,315 400,318 408,317 411,319 415,315 416,310 420,312 422,310 425,312 426,310 429,311 428,313 430,314 430,318 432,318ZM523,412 522,417 519,420 522,425 521,427 520,430 525,438 540,445 554,442 555,449 552,454 546,461 547,466 545,468 535,472 534,475 532,474 530,480 524,481 520,488 514,489 513,493 508,497 512,498 509,505 506,503 504,505 500,505 498,509 492,507 490,509 490,513 488,512 488,510 484,510 480,507 479,509 476,512 475,508 468,503 466,505 463,501 455,501 457,499 455,492 443,494 438,488 435,489 434,494 424,492 423,488 421,486 409,486 409,484 416,480 419,477 417,476 419,471 425,472 426,461 434,453 429,446 429,441 426,437 426,432 433,434 434,438 444,433 445,435 448,433 448,438 456,439 460,445 464,444 465,441 470,444 468,442 469,436 467,432 462,432 459,430 459,426 462,425 461,425 461,422 466,424 469,421 466,419 468,412 474,412 476,407 482,404 481,403 482,402 484,401 485,402 488,399 498,400 497,391 492,390 494,383 502,387 504,384 509,383 511,389 514,390 515,396 519,400 525,401 528,410 524,410 523,412ZM500,515 499,514 501,514 500,515ZM493,513 492,516 490,515 493,513ZM437,430 438,427 441,426 443,429 442,430 440,434 436,434 437,430ZM626,585 625,598 621,601 621,602 624,602 618,611 620,613 618,616 617,616 613,614 613,611 604,607 600,602 605,596 596,592 598,590 597,589 599,588 601,583 600,581 593,583 592,579 598,574 594,569 591,567 591,562 596,559 593,555 590,555 593,551 595,551 595,545 604,538 609,537 614,531 618,531 621,535 623,531 622,525 623,515 626,514 628,515 630,527 628,535 631,542 632,564 632,570 626,579 626,585Z"/>
+        <circle class="dot" cx="381" cy="217" r="5"/><circle class="dot" cx="434" cy="265" r="5"/><circle class="dot" cx="484" cy="252" r="5"/><circle class="dot" cx="287" cy="230" r="5"/><circle class="dot" cx="435" cy="280" r="5"/><circle class="dot" cx="361" cy="342" r="5"/><circle class="dot" cx="443" cy="247" r="5"/><circle class="dot" cx="417" cy="279" r="5"/><circle class="dot" cx="434" cy="310" r="5"/><circle class="dot" cx="340" cy="308" r="5"/><circle class="dot" cx="371" cy="294" r="5"/><circle class="dot" cx="364" cy="267" r="5"/><circle class="dot" cx="245" cy="293" r="5"/><circle class="dot" cx="369" cy="192" r="5"/><circle class="dot" cx="375" cy="321" r="5"/>
+        <path class="route" d="M434,343 L330,151"/>
+        <path class="route" d="M207,401 L330,151"/>
+        <g class="leg-time"><rect x="356" y="236" width="58" height="26" rx="6"/><text x="385" y="254" text-anchor="middle">1 h 56</text></g>
+        <g class="leg-time"><rect x="166" y="322" width="58" height="26" rx="6"/><text x="195" y="340" text-anchor="middle">2 h 10</text></g>
+        <!-- origins -->
+        <g class="origin"><rect x="425" y="334" width="20" height="20" rx="3"/><text x="435" y="349" text-anchor="middle">2</text></g>
+        <text class="olabel" x="452" y="360">Lyon</text>
+        <g class="origin"><rect x="197" y="391" width="20" height="20" rx="3"/><text x="207" y="406" text-anchor="middle">3</text></g>
+        <text class="olabel" x="132" y="432">Bordeaux</text>
+        <!-- ranked destinations as chips -->
+        <circle class="chip-dot" cx="332" cy="262" r="5"/>
+        <g class="chip"><rect x="290" y="272" width="92" height="30" rx="7"/><text x="336" y="293" text-anchor="middle">2 · 3 h 55</text></g>
+        <circle class="chip-dot" cx="260" cy="242" r="5"/>
+        <g class="chip"><rect x="170" y="220" width="86" height="30" rx="7"/><text x="213" y="241" text-anchor="middle">3 · 4 h 02</text></g>
+        <circle class="chip-dot" cx="311" cy="211" r="5"/>
+        <g class="chip"><rect x="216" y="180" width="92" height="30" rx="7"/><text x="262" y="201" text-anchor="middle">4 · 4 h 15</text></g>
+        <g class="chip"><rect x="452" y="300" width="86" height="30" rx="7"/><text x="495" y="321" text-anchor="middle">5 · 4 h 22</text></g>
+        <!-- winner -->
+        <g class="chip win"><rect x="248" y="96" width="166" height="38" rx="8"/><text x="331" y="122" text-anchor="middle">1 Paris · 2 h 10</text></g>
+        <circle class="chip-dot" cx="330" cy="151" r="8" style="fill:var(--win);stroke:var(--on-win);stroke-width:2.5"/>
+        <g class="origin"><rect x="340" y="140" width="20" height="20" rx="3"/><text x="350" y="155" text-anchor="middle">1</text></g>
+      </svg>
+      <figcaption>Traits à vol d’oiseau. Les étiquettes résument le classement&#8239;; choisissez une ville dans la liste.</figcaption>
+    </figure>
+
+    <section class="inputs" aria-labelledby="in-title">
+      <h2 id="in-title">Qui part, et quand&#8239;?</h2>
+      <div class="grp" role="group" aria-label="Groupe 1"><span class="grp-name">Groupe 1</span><input aria-label="Ville du groupe 1" value="Paris"><select aria-label="Transport du groupe 1"><option>Train</option><option>Voiture</option><option>Peu importe</option></select><input aria-label="Personnes du groupe 1" type="number" value="2"></div>
+      <div class="grp" role="group" aria-label="Groupe 2"><span class="grp-name">Groupe 2</span><input aria-label="Ville du groupe 2" value="Lyon"><select aria-label="Transport du groupe 2"><option>Train</option><option>Voiture</option><option>Peu importe</option></select><input aria-label="Personnes du groupe 2" type="number" value="1"></div>
+      <div class="grp" role="group" aria-label="Groupe 3"><span class="grp-name">Groupe 3</span><input aria-label="Ville du groupe 3" value="Bordeaux"><select aria-label="Transport du groupe 3"><option>Train</option><option>Voiture</option><option>Peu importe</option></select><input aria-label="Personnes du groupe 3" type="number" value="3"></div>
+      <a class="add" href="#">Ajouter un groupe</a>
+      <div class="dates">
+        <label for="b-d1">Départ à partir du</label><input id="b-d1" type="date" value="2026-11-13"><input aria-label="Heure de départ" type="time" value="14:00">
+        <label for="b-d2">Retour à partir du</label><input id="b-d2" type="date" value="2026-11-15"><input aria-label="Heure de retour" type="time" value="16:00">
+      </div>
+      <button class="go" type="button">Recalculer la carte</button>
+    </section>
+  </div>
+
+  <aside class="panel" aria-label="Résultat">
+    <section class="answer">
+      <h1>Rendez-vous à <mark>Paris</mark></h1>
+      <p>Personne ne voyage plus de <strong>2&nbsp;h&nbsp;10</strong>&#8239;: le Groupe&nbsp;3 depuis Bordeaux.</p>
+      <div class="kpis">
+        <div><b>2&nbsp;h&nbsp;10</b><span>le plus long</span></div>
+        <div><b>1&nbsp;h&nbsp;20</b><span>moyenne par sens</span></div>
+        <div><b>34–168&nbsp;€</b><span>par personne, A/R</span></div>
+      </div>
+    </section>
+
+    <section class="blk" aria-labelledby="rk">
+      <h2 id="rk">20 villes comparées</h2>
+      <ol class="rank">
+        <li><a class="sel" href="#" aria-current="true"><span class="badge">1</span><span class="city">Paris<small>moyenne 1&nbsp;h&nbsp;20, 204–1&#8239;010&nbsp;€</small></span><span class="max">2&nbsp;h&nbsp;10</span></a></li>
+        <li><a href="#"><span class="badge">2</span><span class="city">Bourges<small>moyenne 3&nbsp;h&nbsp;03, ≥&nbsp;134&nbsp;€</small></span><span class="max">3&nbsp;h&nbsp;55</span></a></li>
+        <li><a href="#"><span class="badge">3</span><span class="city">Tours<small>moyenne 2&nbsp;h&nbsp;03, 199–972&nbsp;€</small></span><span class="max">4&nbsp;h&nbsp;02</span></a></li>
+        <li><a href="#"><span class="badge">4</span><span class="city">Orléans<small>moyenne 2&nbsp;h&nbsp;46, ≥&nbsp;143&nbsp;€</small></span><span class="max">4&nbsp;h&nbsp;15</span></a></li>
+        <li><a href="#"><span class="badge">5</span><span class="city">Lyon<small>moyenne 2&nbsp;h&nbsp;06</small></span><span class="max">4&nbsp;h&nbsp;22</span></a></li>
+      </ol>
+      <a class="more" href="#">Afficher les 15 autres</a>
+    </section>
+
+    <section class="blk" aria-labelledby="gp">
+      <h2 id="gp">Chaque groupe vers Paris</h2>
+      <article class="group">
+        <div class="group-head"><h3>Groupe 2, Lyon</h3><span class="t">1&nbsp;h&nbsp;56</span></div>
+        <p class="sub">1 voyageur, en train, sans correspondance</p>
+        <p class="leg-title">Aller, vendredi 13&nbsp;novembre</p>
+        <ol class="line">
+          <li class="stop"><span class="hm">15:04</span>Lyon Part-Dieu</li>
+          <li class="train"><b>TGV INOUI 6622</b>, 25,5–115&nbsp;€</li>
+          <li class="stop"><span class="hm">17:00</span>Paris Gare de Lyon</li>
+        </ol>
+        <p class="leg-title">Retour, dimanche 15&nbsp;novembre</p>
+        <ol class="line">
+          <li class="stop"><span class="hm">18:42</span>Paris Gare de Lyon</li>
+          <li class="train"><b>TGV INOUI 6665</b>, 25,5–115&nbsp;€</li>
+          <li class="stop"><span class="hm">20:35</span>Lyon Part-Dieu</li>
+        </ol>
+        <div class="cost"><span>Coût aller-retour<br><b>51–230&nbsp;€</b></span><a class="more" href="#">Vérifier sur SNCF Connect</a></div>
+      </article>
+      <article class="group">
+        <div class="group-head"><h3>Groupe 3, Bordeaux</h3><span class="t">2&nbsp;h&nbsp;10</span></div>
+        <p class="sub">3 voyageurs, en train, 153–780&nbsp;€ A/R</p>
+      </article>
+      <article class="group">
+        <div class="group-head"><h3>Groupe 1, Paris</h3><span class="t">sur place</span></div>
+        <p class="sub">2 voyageurs, trajet en ville non compté</p>
+      </article>
+    </section>
+  </aside>
+
+  <footer class="notes">
+    <p>Horaires SNCF théoriques (GTFS du 11/11/2026), trains cherchés dans les six heures après l’heure choisie. Vérifiez avant de réserver.</p>
+    <p>Prix plein tarif en fourchette. «&nbsp;≥&nbsp;»&#8239;: minimum, un tarif TER n’est pas publié. Voiture&#8239;: km × 0,35&nbsp;€, routes IGN.</p>
+  </footer>
+</div>
+</body>
+</html>

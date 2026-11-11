@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Où se retrouver ? Compare les temps de trajet en voiture et en train de plusieurs groupes vers des villes de France.",
-  "engines": { "node": ">=22.18.0" },
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -15,6 +17,8 @@
     "rail": "node scripts/build-rail.ts"
   },
   "dependencies": {
+    "@fontsource-variable/newsreader": "5.3.0",
+    "@fontsource-variable/public-sans": "5.3.0",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "lucide-react": "^1.31.0",
