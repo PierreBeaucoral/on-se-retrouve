@@ -28,7 +28,6 @@ fieldset{border:0;padding:0;margin:0;min-width:0}input{background:var(--card);bo
 .group-details summary,.text-button,.quick-days button{min-height:44px;display:inline-flex;align-items:center}
 .destination-row[aria-current] .rank-number,.rank-number{color:var(--muted-foreground)}
 @media(max-width:720px){
- .groups-summary{display:flex}
  .ranking-card{max-height:none}.destination-list{overflow:visible}
  .scenario-list .long{display:none}.scenario-list .short{display:inline}
  .detail-heading .pill{white-space:normal;margin-left:0}
@@ -53,9 +52,19 @@ fieldset{border:0;padding:0;margin:0;min-width:0}input{background:var(--card);bo
 .progress-slot{min-height:14px;margin-top:8px}
 .primary:disabled{opacity:1;background:var(--muted);color:var(--muted-foreground)}
 .empty-detail{margin-top:22px;padding:22px}
-.groups-summary{display:none;min-height:44px;align-items:center;font-size:.875rem;color:var(--link);margin-bottom:8px}
 .skip{position:absolute;left:-9999px;top:8px;z-index:10;background:var(--card);color:var(--link);padding:10px 14px;border-radius:var(--radius)}
 .skip:focus{left:8px}
 .sea-label{fill:var(--map-label)}
-@media(max-width:720px){.groups-summary{display:flex}}
 @media(prefers-color-scheme:dark){input::-webkit-calendar-picker-indicator{filter:invert(.85)}}
+/* Groups panel: always open with no summary on wide screens; a tappable one-line summary on phones */
+.groups-toggle{display:none}
+.phone-only{display:none}
+@media(max-width:720px){
+ .mainpane{order:0}
+ .sidebar{padding:12px 22px;border-bottom:1px solid var(--border)}
+ .tagline,.sidebar>.muted,.sidebar-foot{display:none}
+ .groups-toggle{display:flex;justify-content:space-between;gap:12px;align-items:center;min-height:44px;font-size:.9375rem;font-weight:600}
+ .groups-toggle span{color:var(--link);font-weight:500;white-space:nowrap}
+ .groups-panel[open] .groups-toggle span{visibility:hidden}
+ .phone-only{display:inline}.wide-only{display:none}
+}
