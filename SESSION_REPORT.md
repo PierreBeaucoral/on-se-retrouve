@@ -130,3 +130,10 @@
 **Status:**
 - Done: all of the above live.
 - Pending: car routes depend on IGN recovering; TER estimate stays wide for 9 of 11 regions until SNCF republishes fares.
+
+## 2026-11-12 — OSRM fallback for car routing
+
+- IGN Géoplateforme routing still down (all engines 504, getcapabilities 500) at 06:40 UTC. Added the public OSRM demo server (OpenStreetMap roads) as fallback in `lib/travel/car-client.ts`: IGN first; on failure OSRM, throttled to ~1 req/s, cached one day, labelled "OpenStreetMap (OSRM, secours IGN)" on each leg; IGN retried after 10 min. Error message keeps "IGN" so the outage alert still shows when both fail.
+- Checked locally with IGN really down: 2 IGN 504 then 74 OSRM 200, full calculation in 83 s, all car trips available. 39 tests, typecheck, lint, build pass.
+- Decision: OSRM demo server accepted by the user despite its fair-use limit (no SLA) and no-traffic times slightly shorter than IGN. Alternative rejected: waiting for IGN.
+- Found: names the user still sees on the site come from their own browser's saved groups (`retrouve.preferences.v1`), not from the published site. Pre-rewrite commits are still served by GitHub by SHA (referenced by 9 old Actions runs and 7 old Pages deployments); recreating the repo proposed, awaiting the user's decision.

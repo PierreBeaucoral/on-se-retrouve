@@ -4,7 +4,7 @@
 
 Live: https://pierrebeaucoral.github.io/on-se-retrouve/
 
-No backend, no API key. The browser asks the IGN routing service for car durations, and reads train durations from tables precomputed weekly from SNCF's open timetable, for every weekend the timetable covers (about five months ahead).
+No backend, no API key. The browser asks the IGN routing service for car durations (the public OSRM server on OpenStreetMap data when IGN is down), and reads train durations from tables precomputed weekly from SNCF's open timetable, for every weekend the timetable covers (about five months ahead).
 
 ## How the ranking works
 
@@ -26,7 +26,7 @@ The engine lives in `lib/travel/model.ts` and is covered by `tests/model.test.ts
 
 | Mode | Source | How |
 |------|--------|-----|
-| Car | [IGN Géoplateforme itinéraire](https://www.data.gouv.fr/dataservices/api-geoplateforme-calcul-ditineraire) | Called from the browser (CORS enabled), fastest route on the BD TOPO road graph, city centre to city centre, no traffic. Cached seven days in the browser. |
+| Car | [IGN Géoplateforme itinéraire](https://www.data.gouv.fr/dataservices/api-geoplateforme-calcul-ditineraire) | Called from the browser (CORS enabled), fastest route on the BD TOPO road graph, city centre to city centre, no traffic. Cached seven days in the browser. When IGN fails, [OSRM](https://project-osrm.org)'s public demo server (OpenStreetMap roads, © OpenStreetMap contributors) answers instead, at most one request per second, cached one day and labelled on the leg; IGN is retried after ten minutes. |
 | Train | [Horaires SNCF, GTFS](https://transport.data.gouv.fr/datasets/horaires-sncf) on transport.data.gouv.fr (TGV INOUI, OUIGO, Intercités, TER; 151-day horizon, refreshed daily) | `scripts/build-rail.ts` downloads the feed and precomputes, for every Friday, Saturday and Sunday inside the feed's horizon (about 70 dates), the shortest rail journey between every pair of the app's 156 cities. Coaches are excluded. |
 | Train fares | [Tarifs TGV INOUI et OUIGO](https://ressources.data.sncf.com/explore/dataset/tarifs-tgv-inoui-ouigo/), [Tarifs Intercités](https://ressources.data.sncf.com/explore/dataset/tarifs-intercites/) (SNCF open data) | Downloaded by `scripts/build-rail.ts` and matched to each train by brand and station UIC code (`lib/rail/fares.ts`). Full-price min–max range, 2nd class. TER: 2025 fares for two regions from the Web Archive copies of the withdrawn `tarifs-ter-paca` and `tarifs-ter-pdll` datasets (`data/ter-fares-2025.csv`), estimate elsewhere (see Cost estimate). If the download fails the tables are built without published prices. |
 | Communes | [geo.api.gouv.fr](https://geo.api.gouv.fr/decoupage-administratif/communes) | Called from the browser when a user searches a town outside the list. |
@@ -63,7 +63,7 @@ src/App.tsx                   the page (groups, dates, scenarios, ranking, detai
 src/travel-map.tsx            SVG map of France
 lib/travel/model.ts           groups, scenarios, ranking, validation
 lib/travel/places.ts          generated list of cities and their stations
-lib/travel/car-client.ts      IGN routing client (browser)
+lib/travel/car-client.ts      IGN routing client with OSRM fallback (browser)
 lib/travel/rail-client.ts     reads the precomputed rail tables
 lib/travel/client.ts          one round trip = car or rail, outbound + return
 lib/rail/gtfs.ts              GTFS parsing, station mapping

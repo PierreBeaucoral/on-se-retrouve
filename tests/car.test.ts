@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseIgnDistance, parseIgnDuration } from "../lib/travel/car-client.ts";
+import { parseIgnDistance, parseIgnDuration, parseOsrm } from "../lib/travel/car-client.ts";
 
 test("parsing IGN convertit les secondes en minutes et rejette les valeurs douteuses", () => {
   assert.equal(parseIgnDuration({ duration: 3661, timeUnit: "second" }), 61);
@@ -18,4 +18,11 @@ test("parsing IGN lit la distance en kilomètres ou en mètres et rejette le res
   assert.equal(parseIgnDistance({ distance: 465, distanceUnit: "mile" }), null);
   assert.equal(parseIgnDistance({ distance: -1, distanceUnit: "kilometer" }), null);
   assert.equal(parseIgnDistance({ duration: 10 }), null);
+});
+
+test("parsing OSRM lit la première route (secondes, mètres) et rejette les réponses en erreur", () => {
+  assert.deepEqual(parseOsrm({ code: "Ok", routes: [{ duration: 15840.2, distance: 465270 }] }), { minutes: 264, km: 465.3 });
+  assert.equal(parseOsrm({ code: "NoRoute", routes: [] }), null);
+  assert.equal(parseOsrm({ code: "Ok", routes: [{ duration: -1, distance: 10 }] }), null);
+  assert.equal(parseOsrm(null), null);
 });
