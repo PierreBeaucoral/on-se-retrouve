@@ -137,3 +137,10 @@
 - Checked locally with IGN really down: 2 IGN 504 then 74 OSRM 200, full calculation in 83 s, all car trips available. 39 tests, typecheck, lint, build pass.
 - Decision: OSRM demo server accepted by the user despite its fair-use limit (no SLA) and no-traffic times slightly shorter than IGN. Alternative rejected: waiting for IGN.
 - Found: names the user still sees on the site come from their own browser's saved groups (`retrouve.preferences.v1`), not from the published site. Pre-rewrite commits are still served by GitHub by SHA (referenced by 9 old Actions runs and 7 old Pages deployments); recreating the repo proposed, awaiting the user's decision.
+
+## 2026-11-12 — "Au plus rapide" tab, readable scenarios
+
+- New tab "Au plus rapide": `fastestModes(groups, dest, matrix)` in `lib/travel/model.ts`; `rank` now accepts per-destination modes. Each "les deux" group takes, per city, its shorter round trip (train + 2 × access); missing data loses; both missing → car.
+- Scenarios are labelled by group names ("Voiture : Groupe 1, Groupe 2 · Train : Groupe 3") in the select and the comparison table; the "V / T" legend is gone; the select wraps on phones.
+- Decision: "fastest" is per group (each minimises its own round trip), as requested, not the fairness-optimal combination; that remains available via the scenario comparison.
+- Checked at 390 px and 1280 px: 4 tabs fit, no horizontal scroll. 40 tests, typecheck, lint, build pass.

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   defaultDestinations, duration, initialGroups, originFor, rank, scenarios,
-  tripKey, validMinutes, tripCost, costLabel, validCustom, nearestPlace, places,
+  tripKey, validMinutes, tripCost, fastestModes, costLabel, validCustom, nearestPlace, places,
   type Group, type Matrix,
 } from "../lib/travel/model.ts";
 
@@ -184,4 +184,23 @@ test("un tarif TER estimé rend le coût approximatif (≈) sans le rendre incom
   assert.equal(c.complete, true);
   assert.equal(c.estimated, true);
   assert.equal(costLabel(c), "≈ 16–25 €");
+});
+
+test("au plus rapide : chaque groupe « les deux » prend son mode le plus court, par destination", () => {
+  const flex = { ...clermont, choice: "both" as const, access: 10 };
+  const train = { ...lyon, choice: "train" as const };
+  const matrix: Matrix = {
+    [tripKey("clermont", "dijon", "car")]: { out: leg(200), back: leg(200) },
+    [tripKey("clermont", "dijon", "train")]: { out: leg(150), back: leg(150) },
+    [tripKey("clermont", "nevers", "car")]: { out: leg(100), back: leg(100) },
+    [tripKey("clermont", "nevers", "train")]: { out: leg(95), back: leg(95) }, // +2×10 min d'accès : la voiture gagne
+    [tripKey("lyon", "dijon", "train")]: { out: leg(120), back: leg(120) },
+    [tripKey("lyon", "nevers", "train")]: { out: leg(180), back: leg(180) },
+  };
+  assert.deepEqual(fastestModes([flex, train], "dijon", matrix), ["train", "train"]);
+  assert.deepEqual(fastestModes([flex, train], "nevers", matrix), ["car", "train"]);
+  const rows = rank([flex, train], ["dijon", "nevers"], (d) => fastestModes([flex, train], d, matrix), matrix);
+  assert.deepEqual(rows.map((r) => [r.id, r.max, r.trips[0].mode]), [["dijon", 160, "train"], ["nevers", 180, "car"]]);
+  delete matrix[tripKey("clermont", "dijon", "train")];
+  assert.deepEqual(fastestModes([flex], "dijon", matrix), ["car"], "un mode sans données perd");
 });

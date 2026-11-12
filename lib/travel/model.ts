@@ -36,9 +36,17 @@ export const originFor=(g:Group,m:Mode)=>m==="train"?(g.railPlace||g.place):g.pl
 export function scenarios(groups:Group[]):Mode[][] {
  return groups.reduce<Mode[][]>((rows,g)=>rows.flatMap(row=>(g.choice==="both"?["car","train"]:[g.choice]).map(m=>[...row,m as Mode])),[[]]);
 }
-export function rank(groups:Group[], destinations:string[], modes:Mode[],matrix:Matrix) {
+// "Au plus rapide": for one destination, each "both" group takes the mode with the shorter round trip
+// for itself (train time includes access minutes). A mode with a missing leg loses; if both miss, car.
+export function fastestModes(groups:Group[], dest:string, matrix:Matrix):Mode[] {
+ const total=(g:Group,m:Mode)=>{const t=matrix[tripKey(originFor(g,m),dest,m)];const x=m==="train"?g.access:0;return validMinutes(t?.out?.minutes)&&validMinutes(t?.back?.minutes)?t.out.minutes+t.back.minutes+2*x:Infinity;};
+ return groups.map(g=>g.choice!=="both"?g.choice:total(g,"train")<total(g,"car")?"train":"car");
+}
+// modes: one mode per group, or a function giving them per destination (fastestModes).
+export function rank(groups:Group[], destinations:string[], modes:Mode[]|((dest:string)=>Mode[]),matrix:Matrix) {
  return destinations.map(id=>{
- const trips=groups.map((g,i)=>{const m=modes[i];const t=matrix[tripKey(originFor(g,m),id,m)];const extra=m==="train"?g.access:0;return {group:g.id,mode:m,trip:t,out:t?.out&&validMinutes(t.out.minutes)? t.out.minutes+extra:null,back:t?.back&&validMinutes(t.back.minutes)?t.back.minutes+extra:null};});
+ const ms=typeof modes==="function"?modes(id):modes;
+ const trips=groups.map((g,i)=>{const m=ms[i];const t=matrix[tripKey(originFor(g,m),id,m)];const extra=m==="train"?g.access:0;return {group:g.id,mode:m,trip:t,out:t?.out&&validMinutes(t.out.minutes)? t.out.minutes+extra:null,back:t?.back&&validMinutes(t.back.minutes)?t.back.minutes+extra:null};});
  const complete=trips.every(t=>t.out!==null&&t.back!==null);
  const durations=trips.flatMap(t=>[t.out,t.back]).filter((x):x is number=>x!==null);
  return {id,trips,complete,max:complete?Math.max(...durations):null,mean:complete?durations.reduce((a,b)=>a+b,0)/durations.length:null,known:durations.length};

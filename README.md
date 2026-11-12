@@ -8,7 +8,7 @@ No backend, no API key. The browser asks the IGN routing service for car duratio
 
 ## How the ranking works
 
-- Flexible groups ("voiture ou train") generate scenarios: every combination of modes across groups. Three views are offered: everyone flexible drives, everyone flexible takes the train, or any single scenario.
+- Flexible groups ("voiture ou train") generate scenarios: every combination of modes across groups. Four views are offered: everyone flexible drives; everyone flexible takes the train; "au plus rapide", where for each destination every flexible group takes whichever mode gives it the shorter round trip (train including its access time; a mode with missing data loses); or any single scenario, labelled by who drives and who takes the train.
 - For a scenario and a destination, each group contributes an outbound and a return duration. Train legs add the group's station access margin on each leg.
 - Destinations where every group has both legs are **complete** and ranked first by the maximum duration, then by the mean duration (each group weighs the same), then alphabetically. Incomplete destinations are listed but unranked. No missing value is ever replaced by zero.
 - Manual train entry stays available for dates or connections the precomputed tables do not cover.

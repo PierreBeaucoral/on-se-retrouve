@@ -215,3 +215,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0}
 }
 @media(prefers-color-scheme:dark){input::-webkit-calendar-picker-indicator{filter:invert(.85)}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* Scenario names list every group: let the select wrap instead of cutting the names off. */
+.scenario-select [data-slot="select-trigger"] { height: auto; min-height: 2.25rem; padding-block: .4rem; text-align: left; }
+.scenario-select [data-slot="select-value"] { display: block; -webkit-line-clamp: unset; white-space: normal; overflow: visible; }

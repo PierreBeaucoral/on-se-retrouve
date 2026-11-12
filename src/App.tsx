@@ -7,7 +7,7 @@ import {Tabs,TabsList,TabsTrigger,TabsContent} from "@/components/ui/tabs";
 import {Table,TableHeader,TableBody,TableHead,TableCell,TableRow} from "@/components/ui/table";
 import {Checkbox} from "@/components/ui/checkbox";
 import {Progress} from "@/components/ui/progress";
-import {initialGroups,places,placeOf,registerPlace,validCustom,nearestPlace,type Place,defaultDestinations,scenarios,rank,duration,originFor,tripKey,validMinutes,tripCost,costLabel,DEFAULT_KM_RATE,type Group,type Choice,type Mode,type Matrix,type Trip,type Leg} from "@/lib/travel/model";
+import {initialGroups,places,placeOf,registerPlace,validCustom,nearestPlace,type Place,defaultDestinations,scenarios,rank,fastestModes,duration,originFor,tripKey,validMinutes,tripCost,costLabel,DEFAULT_KM_RATE,type Group,type Choice,type Mode,type Matrix,type Trip,type Leg} from "@/lib/travel/model";
 import FranceMap from "./travel-map";
 const nameOf=(id:string)=>placeOf(id)?.name||id;
 const modeName=(m:Mode)=>m==="car"?"Voiture":"Train";
@@ -32,7 +32,9 @@ export default function Home(){
  const index=tab==="car"?0:tab==="train"?combinations.length-1:Math.min(scenarioIndex,combinations.length-1);
  const modes=combinations[index];
  const effective=useMemo(()=>({...matrix,...manual}),[matrix,manual]);
- const rows=useMemo(()=>rank(groups,destinations,modes,effective),[groups,destinations,modes,effective]);
+ const rows=useMemo(()=>rank(groups,destinations,tab==="fastest"?(d:string)=>fastestModes(groups,d,effective):modes,effective),[groups,destinations,modes,effective,tab]);
+ // Who travels how, by group name: "Voiture : A, B · Train : C".
+ const whoGoes=(ms:Mode[])=>(["car","train"] as const).map(m=>{const names=groups.filter((_,i)=>ms[i]===m).map(g=>g.name);return names.length?`${m==="car"?"Voiture":"Train"} : ${names.join(", ")}`:"";}).filter(Boolean).join(" · ");
  // The view follows the best destination until someone picks another one.
  const winner=rows.find(r=>r.complete);const activeId=selected&&destinations.includes(selected)?selected:(winner?.id??destinations[0]);
  const active=rows.find(r=>r.id===activeId)||rows[0];
@@ -103,11 +105,13 @@ export default function Home(){
       <TabsList aria-label="Scénario de transport" className="segmented">
        <TabsTrigger value="car"><span>Voiture<span className="long"> si possible</span></span></TabsTrigger>
        <TabsTrigger value="train"><span>Train<span className="long"> si possible</span></span></TabsTrigger>
+       <TabsTrigger value="fastest"><span><span className="long">Au plus rapide</span><span className="short">Rapide</span></span></TabsTrigger>
        <TabsTrigger value="scenarios"><span><span className="long">Tous les scénarios</span><span className="short">Scénarios</span></span></TabsTrigger>
       </TabsList>
       <TabsContent value="car"><p className="help">Les groupes « les deux » prennent la voiture ; les groupes en train le restent.</p></TabsContent>
       <TabsContent value="train"><p className="help">Les groupes « les deux » prennent le train.</p></TabsContent>
-      <TabsContent value="scenarios"><div className="scenario-select"><Select value={String(index)} onValueChange={v=>setScenarioIndex(Number(v))}><SelectTrigger aria-label="Choisir un scénario"><SelectValue/></SelectTrigger><SelectContent>{combinations.map((m,i)=><SelectItem key={i} value={String(i)}>Scénario {i+1}, {m.filter(x=>x==="car").length} en voiture, {m.filter(x=>x==="train").length} en train</SelectItem>)}</SelectContent></Select></div></TabsContent>
+      <TabsContent value="fastest"><p className="help">Pour chaque ville, chaque groupe « les deux » prend le mode le plus court pour lui, aller et retour compris.</p></TabsContent>
+      <TabsContent value="scenarios"><div className="scenario-select"><Select value={String(index)} onValueChange={v=>setScenarioIndex(Number(v))}><SelectTrigger aria-label="Choisir un scénario"><SelectValue/></SelectTrigger><SelectContent>{combinations.map((m,i)=><SelectItem key={i} value={String(i)}>{i+1}. {whoGoes(m)}</SelectItem>)}</SelectContent></Select></div></TabsContent>
      </Tabs>
     </div>
     <figure className="map-plate">
@@ -117,7 +121,7 @@ export default function Home(){
    </section>
    <div className="sec two">
     <section aria-labelledby="tickets-title">
-     <div className="sec-head"><h2 id="tickets-title">{active&&best&&active.id!==best.id?`Les billets pour ${nameOf(active.id)}`:"Les billets de chacun"}</h2><span className="muted">Scénario {index+1}</span></div>
+     <div className="sec-head"><h2 id="tickets-title">{active&&best&&active.id!==best.id?`Les billets pour ${nameOf(active.id)}`:"Les billets de chacun"}</h2><span className="muted">{tab==="fastest"?"Au plus rapide":tab==="scenarios"?`Scénario ${index+1}`:tab==="car"?"Voiture si possible":"Train si possible"}</span></div>
      {!hasResults||!active?<p className="empty">Lancez le calcul : chaque groupe aura ici son billet, avec ses trains, ses horaires et son coût.</p>
       :active.trips.map((t,i)=><Ticket key={t.group} g={groups[i]} t={t} dest={active.id} kmRate={kmRate} outDay={dayLabel(outDate)} backDay={dayLabel(backDate)} open={openTickets.has(groups[i].id)!==(groups.length<=3||i===0)} onToggle={()=>setOpenTickets(s=>{const n=new Set(s);if(n.has(groups[i].id))n.delete(groups[i].id);else n.add(groups[i].id);return n;})}/>)}
     </section>
@@ -169,8 +173,7 @@ export default function Home(){
     </div></details>
     <details><summary>Comparer les {combinations.length} scénarios</summary><div className="extras-body">
      <Table aria-label={`Comparaison des ${combinations.length} scénarios`}><TableHeader><TableRow><TableHead>Scénario</TableHead><TableHead>Meilleure ville</TableHead><TableHead>Maximum</TableHead><TableHead>Moyenne par sens</TableHead><TableHead/></TableRow></TableHeader>
-      <TableBody>{comparison.map(c=><TableRow key={c.i}><TableCell>{c.i+1}. {c.m.map(m=>m==="car"?"V":"T").join(" / ")}</TableCell><TableCell>{c.result?nameOf(c.result.id):"Données incomplètes"}</TableCell><TableCell>{duration(c.result?.max)}</TableCell><TableCell>{duration(c.result?.mean)}</TableCell><TableCell><button type="button" className="link" onClick={()=>{setTab("scenarios");setScenarioIndex(c.i);if(c.result)setSelected(c.result.id);}}>Afficher</button></TableCell></TableRow>)}</TableBody></Table>
-     <p className="muted small">V = voiture, T = train, dans l’ordre des groupes.</p>
+      <TableBody>{comparison.map(c=><TableRow key={c.i}><TableCell>{c.i+1}. {whoGoes(c.m)}</TableCell><TableCell>{c.result?nameOf(c.result.id):"Données incomplètes"}</TableCell><TableCell>{duration(c.result?.max)}</TableCell><TableCell>{duration(c.result?.mean)}</TableCell><TableCell><button type="button" className="link" onClick={()=>{setTab("scenarios");setScenarioIndex(c.i);if(c.result)setSelected(c.result.id);}}>Afficher</button></TableCell></TableRow>)}</TableBody></Table>
     </div></details>
    </section>
    <footer className="notes" aria-labelledby="notes-title">
