@@ -35,6 +35,8 @@ export default function Home(){
  const rows=useMemo(()=>rank(groups,destinations,tab==="fastest"?(d:string)=>fastestModes(groups,d,effective):modes,effective),[groups,destinations,modes,effective,tab]);
  // Who travels how, by group name: "Voiture : A, B · Train : C".
  const whoGoes=(ms:Mode[])=>(["car","train"] as const).map(m=>{const names=groups.filter((_,i)=>ms[i]===m).map(g=>g.name);return names.length?`${m==="car"?"Voiture":"Train"} : ${names.join(", ")}`:"";}).filter(Boolean).join(" · ");
+ // Which legs are missing, by group: "Manque le retour de Groupe 3 en train".
+ const missingText=(r:{trips:{mode:Mode;out:number|null;back:number|null}[]})=>{const m=r.trips.flatMap((t,i)=>{const k=t.out===null&&t.back===null?"l’aller-retour":t.out===null?"l’aller":t.back===null?"le retour":"";return k?[`${k} de ${groups[i].name} en ${t.mode==="car"?"voiture":"train"}`]:[];});return `Manque ${m.slice(0,2).join(", ")}${m.length>2?` et ${m.length-2} autre${m.length>3?"s":""}`:""}`;};
  // The view follows the best destination until someone picks another one.
  const winner=rows.find(r=>r.complete);const activeId=selected&&destinations.includes(selected)?selected:(winner?.id??destinations[0]);
  const active=rows.find(r=>r.id===activeId)||rows[0];
@@ -128,7 +130,7 @@ export default function Home(){
     <section aria-labelledby="rank-title">
      <div className="sec-head"><h2 id="rank-title">Le classement</h2></div>
      <p className="muted rank-help">Le trajet le plus long d’abord, puis la moyenne.</p>
-     <ol className="rank">{shownRows.map((r,i)=>{const c=costOf(r);return <li key={r.id}><button type="button" onClick={()=>setSelected(r.id)} className={r.id===best?.id?"winner":undefined} aria-current={active?.id===r.id||undefined}><span className="pos">{r.complete?i+1:""}</span><span className="city">{nameOf(r.id)}</span><span className="max">{r.complete?duration(r.max):"À compléter"}</span><span className="sub">{r.complete?`moyenne ${duration(r.mean)}`:`${r.known} durées sur ${groups.length*2}`}{costLabel(c)!=="—"?`, ${costLabel(c,c.people)} par pers.`:""}</span></button></li>;})}</ol>
+     <ol className="rank">{shownRows.map((r,i)=>{const c=costOf(r);return <li key={r.id}><button type="button" onClick={()=>setSelected(r.id)} className={r.id===best?.id?"winner":undefined} aria-current={active?.id===r.id||undefined}><span className="pos">{r.complete?i+1:""}</span><span className="city">{nameOf(r.id)}</span><span className="max">{r.complete?duration(r.max):"À compléter"}</span><span className="sub">{r.complete?`moyenne ${duration(r.mean)}`:missingText(r)}{costLabel(c)!=="—"?`, ${costLabel(c,c.people)} par pers.`:""}</span></button></li>;})}</ol>
      {rows.length>6&&<p className="more"><button type="button" className="link" onClick={()=>setShowAllCities(v=>!v)}>{showAllCities?"Ne garder que les 6 premières":`Voir les ${rows.length-6} autres villes comparées`}</button></p>}
      <p className="muted small">{complete.length} villes sur {destinations.length} ont tous leurs trajets. Une durée manquante n’est jamais remplacée par zéro.</p>
     </section>
@@ -197,16 +199,18 @@ function Ticket({g,t,dest,kmRate,outDay,backDay,open,onToggle}:{g:Group;t:Ranked
  const origin=originFor(g,t.mode);const n=g.people??1;const here=origin===dest;
  const cost=tripCost([g],[t],kmRate);const label=costLabel(cost);
  const legs=[["Aller",outDay,t.trip?.out,t.out],["Retour",backDay,t.trip?.back,t.back]] as const;
+ const gap=!here&&!!t.trip&&(t.out===null||t.back===null);
+ const fill=()=>{const d=document.getElementById("manual") as HTMLDetailsElement|null;if(d){d.open=true;d.scrollIntoView({behavior:"smooth",block:"start"});}};
  const direct=t.mode==="train"&&[t.trip?.out,t.trip?.back].every(l=>l?.transfers===0);
  const book=t.mode==="train"?{href:"https://www.sncf-connect.com/",text:"Voir sur SNCF Connect"}:{href:directions(nameOf(origin),nameOf(dest),"car"),text:"Voir l’itinéraire"};
- return <article className={`ticket${open||here||!t.trip?"":" compact"}`} aria-label={`${g.name}, depuis ${nameOf(origin)}`}>
+ return <article className={`ticket${open||gap||here||!t.trip?"":" compact"}`} aria-label={`${g.name}, depuis ${nameOf(origin)}`}>
   <div className="ticket-main">
    <div className="who"><h3>{g.name}</h3><span className="muted">{nameOf(origin)}, {n} voyageur{n>1?"s":""}{here?"":t.mode==="car"?", en voiture":", en train"}</span></div>
    {here?<p className="plain">Déjà sur place. Le trajet en ville n’est pas compté.</p>
     :!t.trip?<p className="plain muted">À calculer.</p>
-    :open?legs.map(([kind,day,leg,total])=><div className="leg" key={kind}><div className="leg-kind">{kind}<span className="muted">{day}</span></div><div>{leg?<LegDetail leg={leg} mode={t.mode} total={total}/>:<p className="plain muted">{t.trip?.error??"Indisponible."}</p>}</div></div>)
+    :open||gap?legs.map(([kind,day,leg,total])=><div className="leg" key={kind}><div className="leg-kind">{kind}<span className="muted">{day}</span></div><div>{leg&&total!==null?<LegDetail leg={leg} mode={t.mode} total={total}/>:<><p className="plain gap">À compléter. {t.trip?.error??"Durée indisponible."}</p>{t.mode==="train"?<button type="button" className="link" onClick={fill}>Saisir la durée à la main</button>:<p className="small muted">Relancez le calcul plus tard : la saisie manuelle ne concerne que le train.</p>}</>}</div></div>)
     :<div className="legs-sum">{legs.map(([kind,,leg,total])=><span key={kind}>{kind} <b>{duration(total)}</b>{leg?.departure?` à ${displayRailTime(leg.departure)}`:""}</span>)}</div>}
-   {!here&&t.trip&&<button type="button" className="link" aria-expanded={open} onClick={onToggle}>{open?"Masquer le détail":t.mode==="train"?"Voir les trains":"Voir le détail"}</button>}
+   {!here&&t.trip&&!gap&&<button type="button" className="link" aria-expanded={open} onClick={onToggle}>{open?"Masquer le détail":t.mode==="train"?"Voir les trains":"Voir le détail"}</button>}
    {t.mode==="train"&&g.access>0&&!here&&<p className="small muted">Durées comprenant {g.access} min pour rejoindre la gare, par sens.</p>}
   </div>
   <div className="ticket-stub"><div><div className="cost">{here?"0 €":label}</div><div className="per">{here?"pas de billet":n>1&&label!=="—"?`soit ${costLabel(cost,n)} par personne`:"aller-retour"}</div></div>{!here&&<a className="book" target="_blank" rel="noreferrer" href={book.href}>{book.text} <ExternalLink size={14} aria-hidden="true"/></a>}</div>
