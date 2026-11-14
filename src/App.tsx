@@ -169,6 +169,7 @@ export default function Home(){
     <details><summary>Les villes comparées ({destinations.length} sur {places.length})</summary><div className="extras-body">
      <p className="muted">La meilleure destination est cherchée parmi les villes cochées, pas parmi toutes les communes de France. Les villes cochées restent visibles quel que soit le filtre.</p>
      <label className="narrow">Filtrer les villes<input value={cityFilter} onChange={e=>setCityFilter(e.target.value)} placeholder="Nom de ville…"/></label>
+     <p><button type="button" className="link" disabled={busy} onClick={()=>setDestinations(destinations.length===places.length?defaultDestinations:places.map(p=>p.id))}>{destinations.length===places.length?"Revenir à la sélection par défaut":"Tout cocher"}</button></p>
      <div className="city-checks">{places.filter(p=>!cityFilter||normalize(p.name).includes(normalize(cityFilter))||destinations.includes(p.id)).map(p=><label key={p.id}><Checkbox checked={destinations.includes(p.id)} disabled={busy||(destinations.length===1&&destinations[0]===p.id)} onCheckedChange={checked=>setDestinations(prev=>checked?[...prev,p.id]:prev.filter(id=>id!==p.id))}/>{p.name}</label>)}</div>
     </div></details>
     <details><summary>Comparer les {combinations.length} scénarios</summary><div className="extras-body">
