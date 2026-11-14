@@ -5,7 +5,7 @@ import type { RailOriginFile } from "../rail/build.ts";
 // public/rail/<date>/<origin>.json: destinations reachable from one origin on one date (format: RailOriginFile).
 export type RailOriginDay = RailOriginFile;
 
-export type RailIndex = { generatedAt: string; feedVersion: string; feedStart: string; feedEnd: string; profiles: string[]; windowMinutes: number; minTransferMinutes: number; maxTransfers?: number; fares?: { generatedAt: string; pairs: number } | null; dates: string[]; pairs?: Record<string, number>; stations: Record<string, string[]> };
+export type RailIndex = { generatedAt: string; feedVersion: string; feedStart: string; feedEnd: string; range?: [string, string]; minTransferMinutes: number; maxTransfers?: number; fares?: { generatedAt: string; pairs: number } | null; dates: string[]; pairs?: Record<string, number>; stations: Record<string, string[]> };
 
 const base = () => `${import.meta.env.BASE_URL}rail/`;
 const dayCache = new Map<string, Promise<RailOriginDay | null>>();
@@ -26,10 +26,13 @@ function loadRailDay(date: string, origin: string): Promise<RailOriginDay | null
   return pending;
 }
 
-// Departures are precomputed for a few daily profiles; use the first profile at or after the requested
-// time so that every reported train leaves after the time the user chose.
-export function pickProfile(profiles: string[], time: string): string | null {
-  return [...profiles].sort().find((p) => p >= time) ?? null;
+const clock = (time: string) => { const [h, m] = time.split(":").map(Number); return h * 60 + m; };
+
+// Journeys of one pair are stored by departure, each arriving earlier than any later-leaving one, so the first
+// journey leaving at or after the requested time is the one that arrives first. Returns its index, or -1.
+export function pickJourney(departures: number[], time: string): number {
+  const t = clock(time);
+  return departures.findIndex((d) => d >= t);
 }
 
 export const formatMinutes = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}${m >= 1440 ? " (+1 j)" : ""}`;
@@ -62,20 +65,23 @@ export async function railLeg(origin: string, destination: string, requested: st
   if (!source) throw new Error(`Aucun horaire précalculé ni projetable pour le ${frDate(date)} : saisissez la durée.`);
   const day = await loadRailDay(source.date, origin);
   if (!day) throw new Error("Aucune gare connue pour cette ville de départ.");
-  // Tables built before per-train details had another layout; they disappear on the next refresh.
-  if (!Array.isArray(day.journeys)) throw new Error("Horaires en cours de mise à jour : rechargez la page.");
-  const profile = pickProfile(day.profiles, time);
-  if (!profile) throw new Error(`Horaires calculés jusqu'à ${day.profiles[day.profiles.length - 1]} : saisissez la durée.`);
-  const journey = day.journeys[day.legs[destination]?.[day.profiles.indexOf(profile)] ?? -1];
-  if (!journey) throw new Error(`Aucun train trouvé dans les ${Math.round(index.windowMinutes / 60)} h après ${profile} (${index.maxTransfers ?? 3} correspondances max).`);
+  // Tables built before every train of the day was kept had another layout; they disappear on the next refresh.
+  if (!Array.isArray(day.segments) || !day.range) throw new Error("Horaires en cours de mise à jour : rechargez la page.");
+  const [first, last] = day.range;
+  const options = (day.legs[destination] ?? []).map((j) => day.journeys[j].map((s) => day.segments[s]));
+  const k = pickJourney(options.map((j) => j[0][2]), time);
+  const journey = options[k];
+  if (!journey) throw new Error(time > last
+    ? `Seuls les trains partant entre ${first} et ${last} sont calculés : choisissez une heure plus tôt ou saisissez la durée.`
+    : `Aucun train après ${time} ce jour-là (${index.maxTransfers ?? 3} correspondances max).`);
   const name = (i: number) => day.stations[i] ?? "?";
   const segments: Segment[] = journey.map(([from, to, d, a, brand, number, min, max, source]) => ({ from: name(from), to: name(to), departure: formatMinutes(d), arrival: formatMinutes(a), brand: day.brands[brand] ?? "", number, ...(min !== undefined && max !== undefined ? { fare: [min, max] as [number, number], ...(source ? { fareSource: source === 2 ? "ter2025" as const : "estimate" as const } : {}) } : {}) }));
   const dep = journey[0][2], arr = journey[journey.length - 1][3];
   return {
     minutes: arr - dep,
     source: source.projected
-      ? `Projection d'après les horaires SNCF du ${frDate(source.date)} (même jour de la semaine, au-delà des horaires publiés), départs dès ${profile}`
-      : `Horaires théoriques SNCF du ${frDate(index.feedVersion)}, départs dès ${profile}`,
+      ? `Projection d'après les horaires SNCF du ${frDate(source.date)} (même jour de la semaine, au-delà des horaires publiés), train arrivant le plus tôt parmi les départs dès ${time}`
+      : `Horaires théoriques SNCF du ${frDate(index.feedVersion)}, train arrivant le plus tôt parmi les départs dès ${time}`,
     departure: `${date}T${formatMinutes(dep)}`,
     arrival: `${date}T${formatMinutes(arr)}`,
     transfers: journey.length - 1,

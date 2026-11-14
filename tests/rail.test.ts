@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { loadFeed, parseCsv, parseGtfsTime, servedStations, stationsForPlace, tripsOnDate, type FeedFiles } from "../lib/rail/gtfs.ts";
 import { buildNetwork, plan } from "../lib/rail/raptor.ts";
-import { buildRailDay, intraCityFootpaths, resolvePlaceStations, upcomingDates, type RailEntry } from "../lib/rail/build.ts";
+import { buildRailDay, clockSeconds, intraCityFootpaths, packOrigin, paretoJourneys, resolvePlaceStations, upcomingDates, type RailEntry } from "../lib/rail/build.ts";
+import { pickJourney } from "../lib/travel/rail-client.ts";
 import { readFileSync } from "node:fs";
 import { buildFareTable, crowKm, fareFamily, legFare, parseTerCsv, terFare, terModel } from "../lib/rail/fares.ts";
 
@@ -117,28 +118,52 @@ test("aucun trajet quand plus rien ne part, ni au-delà de deux correspondances"
   assert.ok(plan(withWalk, ["StopArea:A"], ["StopArea:E"], 8 * 3600, { maxRounds: 2 }));
 });
 
-test("buildRailDay garde le trajet le plus court de la fenêtre de six heures et exporte des minutes", () => {
+test("buildRailDay garde tous les trains utiles de la journée, chacun arrivant avant ceux qui partent plus tard", () => {
   const placeStations = resolvePlaceStations(feed, places);
-  const day = buildRailDay(feed, "2026-09-19", placeStations, { profiles: ["06:00", "08:00", "13:00"], intraCityMinutes: {}, defaultIntraCityMinutes: 30 });
+  const day = buildRailDay(feed, "2026-09-19", placeStations, { intraCityMinutes: {}, defaultIntraCityMinutes: 30 });
+  assert.deepEqual(day.range, ["05:00", "23:00"]);
   // Summary view of an entry: totals plus the stations passed through, in order.
   const view = (e: RailEntry | undefined) => e && { m: e.m, d: e.d, a: e.a, t: e.t, s: [day.stations[e.l[0][0]], ...e.l.map((x) => day.stations[x[1]])] };
-  assert.deepEqual(view(day.legs["08:00"]["paris|lyon"]), { m: 120, d: 480, a: 600, t: 0, s: ["Paris Est", "Lyon Part Dieu"] });
-  // Earliest arrival would be T2+T3 (09:00 → 11:30, 150 min); the direct T9 at 12:07 is shorter and inside the window.
-  assert.deepEqual(view(day.legs["08:00"]["paris|beaune"]), { m: 53, d: 727, a: 780, t: 0, s: ["Paris Est", "Beaune"] });
-  // From 06:00 the six-hour window closes at 12:00, so T9 is out and the connection wins.
-  assert.deepEqual(view(day.legs["06:00"]["paris|beaune"]), { m: 150, d: 540, a: 690, t: 1, s: ["Paris Est", "Dijon", "Beaune"] });
+  // Paris → Lyon: T5 07:00, T1 08:00, T2 09:00 and T8 20:00 (arrives 02:30 the next day); each arrives later than the one before.
+  assert.deepEqual(day.legs["paris|lyon"].map((e) => [e.d, e.a]), [[420, 450], [480, 600], [540, 660], [1200, 1590]]);
+  // Paris → Beaune: T1+T3 (08:00 → 11:30) is beaten by T2+T3 (09:00 → 11:30, same arrival, leaves later); T9 12:07 direct.
+  assert.deepEqual(day.legs["paris|beaune"].map(view), [
+    { m: 150, d: 540, a: 690, t: 1, s: ["Paris Est", "Dijon", "Beaune"] },
+    { m: 53, d: 727, a: 780, t: 0, s: ["Paris Est", "Beaune"] },
+  ]);
   // Each train carries its own times and brand; without a TER model, TER legs stay unpriced.
-  assert.deepEqual(day.legs["06:00"]["paris|beaune"].l.map((x) => x.slice(2)), [[540, 600, "Train TER", "", null, null, 0], [630, 690, "Train TER", "", null, null, 0]]);
+  assert.deepEqual(day.legs["paris|beaune"][0].l.map((x) => x.slice(2)), [[540, 600, "Train TER", "", null, null, 0], [630, 690, "Train TER", "", null, null, 0]]);
   // With one, TER legs not listed in the 2025 file get the distance estimate (source 1); listed pairs are tested below.
   const model = { exact: new Map([["A|B", 9.7], ["B|A", 9.7]]), base: 2, perKm: 0.25, low: 0.7, high: 1.35 };
-  const priced = buildRailDay(feed, "2026-09-19", placeStations, { profiles: ["06:00"], intraCityMinutes: {}, defaultIntraCityMinutes: 30, ter: model });
-  const [first, second] = priced.legs["06:00"]["paris|beaune"].l;
+  const priced = buildRailDay(feed, "2026-09-19", placeStations, { intraCityMinutes: {}, defaultIntraCityMinutes: 30, ter: model });
+  const [first, second] = priced.legs["paris|beaune"][0].l;
   assert.equal(first[8], 1, "fixture station ids carry no UIC code, so no 2025 pair matches");
   assert.deepEqual(second.slice(6), [...terFare(model, "StopArea:B", "StopArea:D", crowKm(feed.stations.get("StopArea:B")!, feed.stations.get("StopArea:D")!)).fare, 1]);
-  assert.equal(day.legs["13:00"]["paris|lyon"], undefined, "T8 leaves at 20:00, outside the six-hour window");
-  assert.deepEqual(view(day.legs["06:00"]["paris|lyon"]), { m: 30, d: 420, a: 450, t: 0, s: ["Paris Est", "Lyon Part Dieu"] }, "07:00 train T5 is the shortest journey from 06:00");
-  assert.equal(day.legs["08:00"]["lyon|paris"], undefined);
-  assert.equal(day.legs["08:00"]["paris|paris"], undefined);
+  // Departures outside the range are left out: from 07:30 to 13:00, T5 (07:00) and T8 (20:00) disappear.
+  const narrow = buildRailDay(feed, "2026-09-19", placeStations, { range: ["07:30", "13:00"], intraCityMinutes: {}, defaultIntraCityMinutes: 30 });
+  assert.deepEqual(narrow.legs["paris|lyon"].map((e) => e.d), [480, 540]);
+  assert.equal(day.legs["lyon|paris"], undefined);
+  assert.equal(day.legs["paris|paris"], undefined);
+});
+
+test("paretoJourneys écarte un train qui part plus tôt mais arrive plus tard", () => {
+  const j = (dep: string, arr: string, transfers = 0) => ({ departure: clockSeconds(dep), arrival: clockSeconds(arr), transfers });
+  // Chosen 13:00: the slow 13:05 (arrives 18:00) loses to the direct 13:30 (arrives 16:00).
+  assert.deepEqual(paretoJourneys([j("13:05", "18:00", 2), j("13:30", "16:00"), j("15:00", "17:00")]), [j("13:30", "16:00"), j("15:00", "17:00")]);
+  // Same departure and arrival: the one with fewer changes stays.
+  assert.deepEqual(paretoJourneys([j("09:00", "11:00", 1), j("09:00", "11:00", 0)]), [j("09:00", "11:00", 0)]);
+});
+
+test("le fichier par ville stocke chaque train une fois et l'appli prend le premier départ à l'heure choisie ou après", () => {
+  const day = buildRailDay(feed, "2026-09-19", resolvePlaceStations(feed, places), { intraCityMinutes: {}, defaultIntraCityMinutes: 30 });
+  const file = packOrigin(day, "paris");
+  const departures = (dest: string) => file.legs[dest].map((j) => file.segments[file.journeys[j][0]][2]);
+  assert.deepEqual(departures("lyon"), [420, 480, 540, 1200]);
+  assert.equal(new Set(file.segments.map((s) => JSON.stringify(s))).size, file.segments.length, "no duplicated train");
+  assert.equal(pickJourney(departures("lyon"), "08:00"), 1, "a train leaving exactly at the chosen time is taken");
+  assert.equal(pickJourney(departures("lyon"), "08:30"), 2);
+  assert.equal(pickJourney(departures("beaune"), "10:00"), 1, "T9 at 12:07");
+  assert.equal(pickJourney(departures("beaune"), "13:00"), -1, "no train left to Beaune");
 });
 
 test("les tarifs SNCF sont rattachés par famille de train et code UIC, dans les deux sens", () => {

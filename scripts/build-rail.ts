@@ -1,11 +1,11 @@
 // CLI: download the SNCF open GTFS feed and write rail tables to public/rail/<date>/<origin>.json.
 // Usage: node scripts/build-rail.ts [--no-fares] [--gtfs <path|url>] [--out public/rail] [--from YYYY-MM-DD]
-//        [--weeks 40] [--days 5,6,0] [--profiles 06:00,...] [--dates 2026-09-18,...]
+//        [--weeks 40] [--days 5,6,0] [--range 05:00,23:00] [--dates 2026-09-18,...]
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { places } from "../lib/travel/model.ts";
 import { loadFeedFromZip } from "../lib/rail/gtfs.ts";
 import { buildFareTable, fetchFareRecords, parseTerCsv, terModel, type FareTable } from "../lib/rail/fares.ts";
-import { buildRailDay, packOrigin, DEFAULT_MAX_TRANSFERS, DEFAULT_PROFILES, resolvePlaceStations, upcomingDates } from "../lib/rail/build.ts";
+import { buildRailDay, packOrigin, DEFAULT_MAX_TRANSFERS, DEFAULT_RANGE, resolvePlaceStations, upcomingDates } from "../lib/rail/build.ts";
 
 export const GTFS_URL = "https://eu.ftp.opendatasoft.com/sncf/plandata/Export_OpenData_SNCF_GTFS_NewTripId.zip";
 const INTRA_CITY_MINUTES: Record<string, number> = { paris: 60, lyon: 40 };
@@ -34,7 +34,7 @@ async function main(): Promise<void> {
   const from = arg("from", todayInParis());
   const weeks = Number(arg("weeks", "40")); // dates beyond the feed horizon are skipped
   const weekdays = arg("days", "5,6,0").split(",").map(Number);
-  const profiles = arg("profiles", DEFAULT_PROFILES.join(",")).split(",");
+  const range = arg("range", DEFAULT_RANGE.join(",")).split(",") as [string, string];
   const explicitDates = arg("dates", "");
   const started = Date.now();
 
@@ -63,8 +63,9 @@ async function main(): Promise<void> {
   const summary: { date: string; pairs: number }[] = [];
   for (const date of dates) {
     const t = Date.now();
-    const day = buildRailDay(feed, date, placeStations, { profiles, intraCityMinutes: INTRA_CITY_MINUTES, fares, ter });
-    const pairs = Object.values(day.legs).reduce((n, table) => n + Object.keys(table).length, 0);
+    const day = buildRailDay(feed, date, placeStations, { range, intraCityMinutes: INTRA_CITY_MINUTES, fares, ter });
+    const pairs = Object.keys(day.legs).length;
+    const journeys = Object.values(day.legs).reduce((n, list) => n + list.length, 0);
     // One file per origin so the browser only downloads the departure cities it needs.
     await mkdir(`${out}/${date}`, { recursive: true });
     const generatedAt = new Date().toISOString();
@@ -72,15 +73,14 @@ async function main(): Promise<void> {
       await writeFile(`${out}/${date}/${origin}.json`, JSON.stringify({ ...packOrigin(day, origin), feedVersion: feed.feedVersion, generatedAt }));
     }
     summary.push({ date, pairs });
-    console.log(`${date} : ${pairs} trajets sur ${profiles.length} profils (${((Date.now() - t) / 1000).toFixed(1)} s)`);
+    console.log(`${date} : ${pairs} paires, ${journeys} trajets (${((Date.now() - t) / 1000).toFixed(1)} s)`);
   }
   const index = {
     generatedAt: new Date().toISOString(),
     feedVersion: feed.feedVersion,
     feedStart: feed.feedStart,
     feedEnd: feed.feedEnd,
-    profiles,
-    windowMinutes: 360,
+    range,
     minTransferMinutes: 10,
     maxTransfers: DEFAULT_MAX_TRANSFERS,
     fares: fares ? { generatedAt: new Date().toISOString(), pairs: fares.size } : null,
